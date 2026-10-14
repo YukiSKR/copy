@@ -26,8 +26,12 @@ REPO  = "yukiskr/copy"      # 用于「清单落后时自动发现新文件」�
 
 
 def natural_key(name: str):
-    """数字感知排序，和页面里的 naturalCompare 保持一致"""
-    return [int(p) if p.isdigit() else p.lower() for p in re.findall(r"\d+|\D+", name.lower())]
+    """数字感知排序键：数字段按数值比、文字段按编码比，
+    与页面里的 naturalCompare 语义一致（注意：不能把 int 和 str 混在一个元组里比）"""
+    key = []
+    for part in re.findall(r"\d+|\D+", name.lower()):
+        key.append((0, int(part), "") if part.isdigit() else (1, 0, part))
+    return key
 
 
 def read_text(p: pathlib.Path) -> str:
