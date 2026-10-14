@@ -22,6 +22,7 @@ TEXTS = BASE / "texts"
 COVER = BASE / "cover.jpg"
 EXTS  = {".txt", ".md", ".json", ".js", ".css", ".html", ".log", ".csv"}
 SKIP  = {"index.json"}
+REPO  = "yukiskr/copy"      # 用于「清单落后时自动发现新文件」，与部署目标保持一致
 
 
 def natural_key(name: str):
@@ -72,6 +73,7 @@ def main():
         return f"data:{mime};base64," + base64.b64encode(p.read_bytes()).decode("ascii")
 
     page = (TPL.read_text(encoding="utf-8")
+            .replace("GITHUB_REPO", REPO)
             .replace("FAVICON_32_URI", data_uri("favicon-32.png", "image/png"))
             .replace("FAVICON_180_URI", data_uri("apple-touch-icon.png", "image/png"))
             .replace("SNAPSHOT_B64", snap)
