@@ -1,0 +1,17 @@
+-perfectworld 国服
+-worldwide 国际服
+VK_F11
+
+3792764707
+2890532477
+
+D:\XXMI\ZZMI\reshade\dinput8.dll
+D:\XXMI\ZZMI\d3d11.dll
+
+vb0 e4ea6e72
+vb1 3c932d4a
+vb2 1c5f8602
+
+vb0 155c8c33
+vb1 33e96788 69960 indexcount 192
+vb2 629bde7b

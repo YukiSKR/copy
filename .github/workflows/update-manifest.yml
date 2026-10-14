@@ -2,6 +2,9 @@ name: 更新 texts 清单
 
 # 往 texts/ 里加或改文本后，自动重新生成 texts/index.json 与 index.html 快照，
 # 这样 GitHub Pages 上的页面立刻就能发现新文件（清单是页面的“花名册”）。
+#
+# 注意：提交时会把远端「其他文件」原样保留 —— 只覆盖 index.html 和 texts/index.json。
+# 之前用「整树替换」的写法会把别人（比如你在网页上直接上传的 txt）删掉，已修正。
 
 on:
   push:
@@ -35,7 +38,7 @@ jobs:
       - name: 重新生成 index.html 与 texts/index.json
         run: python build.py
 
-      - name: 提交变化（先 rebase 再 push，被抢先就重试）
+      - name: 提交变化（保留其他文件，先 rebase 再 push，被抢先就重试）
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -47,13 +50,22 @@ jobs:
           fi
 
           git commit -m "chore: 更新 texts 清单 [skip ci]"
+          NEW_SHA=$(git rev-parse HEAD)
 
           for i in 1 2 3; do
             echo "--- 第 $i 次尝试推送 ---"
-            git fetch origin "${GITHUB_REF_NAME}"
-            git rebase "origin/${GITHUB_REF_NAME}" || git rebase --abort
-            if git push origin "HEAD:${GITHUB_REF_NAME}"; then
-              echo "推送成功"
+            git fetch origin "${GITHUB_REF_NAME}:refs/remotes/origin/${GITHUB_REF_NAME}" --force
+
+            # 以远端最新树为底，只覆盖本次改动的 index.html 与 texts/index.json，
+            # 其余文件（含你在网页上新增的 txt）原样保留 —— 见 tools/merge_tree.py
+            git config core.quotepath false
+            python3 tools/merge_tree.py "origin/${GITHUB_REF_NAME}" "${NEW_SHA}" merged.txt
+            NEWTREE=$(git mktree < merged.txt)
+            COMMIT=$(git commit-tree "$NEWTREE" -p "origin/${GITHUB_REF_NAME}" \
+                     -m "chore: 更新 texts 清单 [skip ci]")
+
+            if git push origin "${COMMIT}:${GITHUB_REF_NAME}"; then
+              echo "推送成功：${COMMIT}"
               exit 0
             fi
             sleep 5
