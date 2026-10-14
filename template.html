@@ -381,6 +381,78 @@
   .empty .big { display: block; font-size: 38px; margin-bottom: 8px; }
 
   .foot { margin-top: 18px; text-align: center; font-size: 11.8px; color: #a294bd; font-weight: 600; letter-spacing: .03em; }
+
+  /* ===== 背景音乐开关（右下角悬浮） ===== */
+  .bgm-btn {
+    position: fixed;
+    right: 22px;
+    bottom: 22px;
+    z-index: 40;
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    padding: 12px 18px 12px 14px;
+    border: 1.5px solid rgba(255, 255, 255, .95);
+    border-radius: 999px;
+    cursor: pointer;
+    font-family: var(--font);
+    font-size: 13.5px;
+    font-weight: 800;
+    letter-spacing: .02em;
+    color: #6c3f78;
+    background: rgba(255, 253, 254, .92);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 14px 30px -14px rgba(120, 60, 150, .75);
+    transition: transform .18s cubic-bezier(.34, 1.56, .64, 1), box-shadow .18s, color .18s, background .2s;
+  }
+  .bgm-btn:hover { transform: translateY(-3px) scale(1.03); box-shadow: 0 18px 34px -14px rgba(120, 60, 150, .85); }
+  .bgm-btn:active { transform: translateY(0) scale(.96); }
+  .bgm-btn .note {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 24px; height: 24px; border-radius: 50%;
+    font-size: 15px; line-height: 1;
+    background: linear-gradient(135deg, var(--pink), var(--blue));
+    color: #fff;
+    box-shadow: 0 4px 10px -4px rgba(190, 80, 170, .9);
+  }
+  .bgm-btn.playing {
+    color: #fff;
+    border-color: transparent;
+    background: linear-gradient(135deg, #ff95cd, #8f9dff);
+    box-shadow: 0 16px 32px -12px rgba(190, 80, 170, .95);
+  }
+  .bgm-btn.playing .note { background: rgba(255, 255, 255, .28); animation: spin 3.4s linear infinite; }
+  .bgm-btn.playing .bars { display: inline-flex; }
+  .bgm-btn.error { color: #a06070; background: #fff5f7; border-color: #ffd9e2; }
+
+  /* 播放中的跳动小竖条 */
+  .bgm-btn .bars { display: none; align-items: flex-end; gap: 2px; height: 13px; }
+  .bgm-btn .bars i {
+    width: 3px; border-radius: 2px; background: currentColor; opacity: .9;
+    animation: bars .9s ease-in-out infinite;
+  }
+  .bgm-btn .bars i:nth-child(1) { height: 6px;  animation-delay: 0s; }
+  .bgm-btn .bars i:nth-child(2) { height: 12px; animation-delay: .18s; }
+  .bgm-btn .bars i:nth-child(3) { height: 8px;  animation-delay: .36s; }
+  @keyframes bars { 0%, 100% { transform: scaleY(.45); } 50% { transform: scaleY(1); } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* 播放后给一点浮动的音符特效 */
+  .bgm-note {
+    position: fixed; z-index: 41; font-size: 16px; pointer-events: none;
+    color: #ff7cc0; text-shadow: 0 2px 8px rgba(255, 255, 255, .9);
+    animation: noteUp 1.5s ease-out forwards;
+  }
+  @keyframes noteUp {
+    0%   { opacity: 0; transform: translate(0, 0) scale(.6) rotate(-10deg); }
+    18%  { opacity: 1; }
+    100% { opacity: 0; transform: translate(var(--dx, 20px), -70px) scale(1.25) rotate(18deg); }
+  }
+
+  @media (max-width: 520px) {
+    .bgm-btn { right: 12px; bottom: 12px; padding: 10px 14px; font-size: 12.5px; }
+    .bgm-btn .txt { display: none; }
+  }
   .mode-pill {
     display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px;
     font-size: 10.5px; font-weight: 800; letter-spacing: .04em;
@@ -477,9 +549,19 @@
 <!-- 文件输入：点击“+ 添加 txt”时使用 -->
 <input type="file" id="filePicker" accept=".txt,.md,.json,.js,.css,.html,text/*" multiple hidden />
 
+<!-- 背景音乐开关：默认不播放，点了才播（preload=none，不点就不下载） -->
+<button class="bgm-btn" id="bgmBtn" type="button" aria-pressed="false"
+        title="播放背景音乐">
+  <span class="note" id="bgmIcon">♪</span>
+  <span class="txt" id="bgmText">播放音乐</span>
+  <span class="bars" aria-hidden="true"><i></i><i></i><i></i></span>
+</button>
+
 <script>
   const LS_KEY   = 'txt-copy-card.dropped.v1';
   const LS_LIMIT = 900 * 1024;          // 拖入文件的总容量上限（localStorage 常用上限约 5MB）
+  const BGM_SRC  = 'bgm.mp3';           // 背景音乐：默认不播放，点了才加载播放
+  const BGM_KEY  = 'txt-copy-card.bgm.v1';
 
   const KEYWORDS = ['const','let','var','function','return','if','else','for','forEach',
                     'true','false','null','window','document','console','typeof','new','try','catch'];
@@ -851,6 +933,8 @@
       nostore: { face: '🥲', title: '添加成功，但没能记住', msg: '浏览器本地存储已满或被禁用，<br />刷新页面后这个标签会消失' },
       reloaded: { face: '🔄', title: '文件列表已更新', msg: '发现新的文本，标签栏已重新排列。<br />想永久保留就把它提交到仓库里～' },
       same: { face: '🐣', title: '没有发现新文件', msg: '文件夹里的文本和刚才一样。<br />新加的 txt 记得让 index.json 清单一并更新。' },
+      bgmfail: { face: '🎧', title: '音乐没能加载', msg: '找不到 <b>bgm.mp3</b>，或浏览器不允许读取本地音频。<br />部署后的网址一定可以播放～' },
+      bgmblock: { face: '🔇', title: '浏览器拦住了播放', msg: '再点一下按钮就好；<br />有些浏览器要求先和页面交互过才允许放声音。' },
     }[kind];
 
     face.textContent = conf.face;
@@ -933,6 +1017,84 @@
   }
   el.copyBtn.addEventListener('click', () => handleCopy(el.copyBtn));
   el.miniCopy.addEventListener('click', () => handleCopy(el.miniCopy));
+
+  /* ---------- 背景音乐（默认不播放，只有点按钮才播） ---------- */
+  const bgmBtn = $('bgmBtn'), bgmIcon = $('bgmIcon'), bgmText = $('bgmText');
+  let bgm = null, bgmReady = false, bgmFailed = false;
+
+  function bgmPaint(playing) {
+    bgmBtn.classList.toggle('playing', !!playing);
+    bgmBtn.setAttribute('aria-pressed', playing ? 'true' : 'false');
+    bgmIcon.textContent = playing ? '♫' : '♪';
+    bgmText.textContent = playing ? '暂停音乐' : '播放音乐';
+    bgmBtn.title = playing ? '暂停背景音乐' : '播放背景音乐';
+  }
+
+  function bgmNotes() {
+    const r = bgmBtn.getBoundingClientRect();
+    for (let i = 0; i < 5; i++) {
+      const s = document.createElement('span');
+      s.className = 'bgm-note';
+      s.textContent = ['♪', '♫', '♬', '🎵', '🎶'][i % 5];
+      s.style.left = (r.left + 10 + Math.random() * (r.width - 20)) + 'px';
+      s.style.top = (r.top - 4) + 'px';
+      s.style.setProperty('--dx', (Math.random() * 60 - 30) + 'px');
+      document.body.appendChild(s);
+      setTimeout(() => s.remove(), 1600);
+    }
+  }
+
+  /* 懒创建：页面加载时不碰音频文件，点了才加载 */
+  function bgmMake() {
+    if (bgm || bgmFailed) return bgm;
+    try {
+      bgm = new Audio(BGM_SRC);
+      bgm.loop = true;
+      bgm.preload = 'none';
+      bgm.volume = 0.65;
+      bgm.addEventListener('play',  () => bgmPaint(true));
+      bgm.addEventListener('pause', () => bgmPaint(false));
+      bgm.addEventListener('ended', () => bgmPaint(false));
+      bgm.addEventListener('error', () => {
+        bgmFailed = true;
+        bgmPaint(false);
+        bgmBtn.classList.add('error');
+        bgmText.textContent = '音乐加载失败';
+        bgmBtn.title = '没找到 ' + BGM_SRC + '（或浏览器不允许读取本地音频）';
+        showToast('bgmfail', BGM_SRC);
+      });
+    } catch (e) {
+      bgmFailed = true;
+    }
+    return bgm;
+  }
+
+  bgmBtn.addEventListener('click', async () => {
+    if (bgmFailed) { showToast('bgmfail', BGM_SRC); return; }
+    const a = bgmMake();
+    if (!a) return;
+    if (!a.paused) { a.pause(); return; }
+    try {
+      // 接着上次的位置继续（只记进度，不自动播放）
+      if (!bgmReady) {
+        const saved = parseFloat(localStorage.getItem(BGM_KEY) || '0');
+        if (saved > 3 && isFinite(saved)) { try { a.currentTime = saved; } catch (e) {} }
+        bgmReady = true;
+      }
+      await a.play();
+      bgmNotes();
+    } catch (e) {
+      bgmPaint(false);
+      showToast('bgmblock', BGM_SRC);
+    }
+  });
+
+  // 关页面前记住播放进度
+  window.addEventListener('pagehide', () => {
+    if (bgm && !bgm.paused) {
+      try { localStorage.setItem(BGM_KEY, String(bgm.currentTime || 0)); } catch (e) {}
+    }
+  });
 
   /* ---------- 单击正文自动全选 ---------- */
   el.code.addEventListener('click', () => {
