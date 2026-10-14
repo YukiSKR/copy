@@ -1,7 +1,7 @@
 name: 更新 texts 清单
 
-# 往 texts/ 里加或改文本后，自动重新生成 texts/index.json，
-# 这样部署在 GitHub Pages 上的页面就能立刻发现新文件。
+# 往 texts/ 里加或改文本后，自动重新生成 texts/index.json 与 index.html 快照，
+# 这样 GitHub Pages 上的页面立刻就能发现新文件（清单是页面的“花名册”）。
 
 on:
   push:
@@ -15,8 +15,15 @@ on:
 permissions:
   contents: write
 
+# 同一个分支上不并发跑，避免两个 runner 互相抢 push
+concurrency:
+  group: update-manifest-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   manifest:
+    # 机器人自己的提交不再触发，避免来回循环
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,14 +35,29 @@ jobs:
       - name: 重新生成 index.html 与 texts/index.json
         run: python build.py
 
-      - name: 提交变化
+      - name: 提交变化（先 rebase 再 push，被抢先就重试）
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add texts/index.json index.html
+
           if git diff --cached --quiet; then
             echo "没有变化，跳过提交"
-          else
-            git commit -m "chore: 更新 texts 清单 [skip ci]"
-            git push
+            exit 0
           fi
+
+          git commit -m "chore: 更新 texts 清单 [skip ci]"
+
+          for i in 1 2 3; do
+            echo "--- 第 $i 次尝试推送 ---"
+            git fetch origin "${GITHUB_REF_NAME}"
+            git rebase "origin/${GITHUB_REF_NAME}" || git rebase --abort
+            if git push origin "HEAD:${GITHUB_REF_NAME}"; then
+              echo "推送成功"
+              exit 0
+            fi
+            sleep 5
+          done
+
+          echo "三次都被抢先，放弃；本地重新跑 python build.py 再推一次即可"
+          exit 1
