@@ -1059,7 +1059,12 @@
   });
 
   (async function init() {
-    await reloadFromFolder();
+    try {
+      await reloadFromFolder();
+    } catch (e) {
+      console.error('初始化失败：', e);
+      showEmpty(true);
+    }
     // 离线快照也没有（没跑过 build.py）时，给一句人能看懂的提示
     if (!FILES.length && location.protocol === 'file:') {
       el.code.innerHTML = '<span class="empty"><span class="big">📁</span>' +
