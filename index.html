@@ -937,7 +937,7 @@
   const face = $('toastFace'), titleEl = $('toastTitle'), msgEl = $('toastMsg'), fileEl = $('toastFile');
   let hideTimer = null;
 
-  function showToast(kind, name) {
+  function showToast(kind, name, detail) {
     clearTimeout(hideTimer);
     const conf = {
       ok:    { face: '🎉', title: '复制成功啦！', msg: '全部内容已在剪贴板中，<br />去需要的地方 Ctrl + V 粘贴即可 ✨' },
@@ -947,12 +947,15 @@
       reloaded: { face: '🔄', title: '文件列表已更新', msg: '发现新的文本，标签栏已重新排列。<br />想永久保留就把它提交到仓库里～' },
       same: { face: '🐣', title: '没有发现新文件', msg: '文件夹里的文本和刚才一样。<br />新加的 txt 记得让 index.json 清单一并更新。' },
       bgmfail: { face: '🎧', title: '音乐没能加载', msg: '找不到 <b>bgm.mp3</b>，或浏览器不允许读取本地音频。<br />部署后的网址一定可以播放～' },
-      bgmblock: { face: '🔇', title: '浏览器拦住了播放', msg: '再点一下按钮就好；<br />有些浏览器要求先和页面交互过才允许放声音。' },
+      bgmload: { face: '🐢', title: '音乐还没准备好', msg: '音频较大（约 9 MB），首次播放要等它缓冲一下。<br />请再点一次按钮试试～' },
+      bgmblock: { face: '🔇', title: '浏览器拦住了播放', msg: '这是浏览器的自动播放策略：<br />需要你<b>再点一次</b>按钮，声音才会出来。<br />（换设备后第一次播放常会遇到）' },
     }[kind];
 
     face.textContent = conf.face;
     titleEl.textContent = conf.title;
-    msgEl.innerHTML = conf.msg;
+    msgEl.innerHTML = conf.msg + (detail
+      ? '<br /><span style="font-size:11px;opacity:.6;word-break:break-all">' + esc(String(detail)) + '</span>'
+      : '');
     fileEl.textContent = name || '';
     fileEl.style.display = name ? 'inline-block' : 'none';
 
@@ -1057,24 +1060,27 @@
     }
   }
 
-  /* 懒创建：页面加载时不碰音频文件，点了才加载 */
+  /* 懒创建：页面加载时不下载音频，点了才加载。
+     preload 用 metadata：只取文件头（几 KB），这样 currentTime 定位和首次 play 更可靠，
+     也几乎不消耗流量。 */
   function bgmMake() {
     if (bgm || bgmFailed) return bgm;
     try {
       bgm = new Audio(BGM_SRC);
       bgm.loop = true;
-      bgm.preload = 'none';
+      bgm.preload = 'metadata';
       bgm.volume = 0.65;
       bgm.addEventListener('play',  () => bgmPaint(true));
       bgm.addEventListener('pause', () => bgmPaint(false));
       bgm.addEventListener('ended', () => bgmPaint(false));
       bgm.addEventListener('error', () => {
+        const err = bgm.error;
         bgmFailed = true;
         bgmPaint(false);
         bgmBtn.classList.add('error');
         bgmText.textContent = '音乐加载失败';
         bgmBtn.title = '没找到 ' + BGM_SRC + '（或浏览器不允许读取本地音频）';
-        showToast('bgmfail', BGM_SRC);
+        showToast('bgmfail', BGM_SRC, err ? (err.message || ('code ' + err.code)) : '');
       });
     } catch (e) {
       bgmFailed = true;
@@ -1082,24 +1088,49 @@
     return bgm;
   }
 
+  /* 播放请求：区分失败原因，并针对「还没加载完」自动重试。
+     浏览器自动播放策略拦截时 name 是 NotAllowedError；
+     文件还没缓冲好/加载被中断时是 AbortError。 */
+  async function bgmTryPlay(a, attempt = 1) {
+    try {
+      await a.play();
+      bgmNotes();
+      return true;
+    } catch (e) {
+      const name = (e && e.name) || 'Error';
+      const detail = (e && e.message) || String(e);
+
+      if (name === 'AbortError' && attempt < 3) {
+        // 常见于「点了播放但文件还没加载好」，等一会儿再试
+        bgmText.textContent = '正在加载…';
+        await new Promise(r => setTimeout(r, 600 * attempt));
+        return bgmTryPlay(a, attempt + 1);
+      }
+
+      bgmPaint(false);
+      if (name === 'NotAllowedError') {
+        showToast('bgmblock', BGM_SRC, detail);
+      } else {
+        showToast('bgmload', BGM_SRC, name + ' · ' + detail);
+      }
+      return false;
+    }
+  }
+
   bgmBtn.addEventListener('click', async () => {
     if (bgmFailed) { showToast('bgmfail', BGM_SRC); return; }
     const a = bgmMake();
     if (!a) return;
     if (!a.paused) { a.pause(); return; }
-    try {
-      // 接着上次的位置继续（只记进度，不自动播放）
-      if (!bgmReady) {
+    // 接着上次的位置继续（只记进度，不自动播放）
+    if (!bgmReady) {
+      try {
         const saved = parseFloat(localStorage.getItem(BGM_KEY) || '0');
-        if (saved > 3 && isFinite(saved)) { try { a.currentTime = saved; } catch (e) {} }
-        bgmReady = true;
-      }
-      await a.play();
-      bgmNotes();
-    } catch (e) {
-      bgmPaint(false);
-      showToast('bgmblock', BGM_SRC);
+        if (saved > 3 && isFinite(saved)) a.currentTime = saved;
+      } catch (e) { /* 忽略 */ }
+      bgmReady = true;
     }
+    await bgmTryPlay(a);
   });
 
   // 关页面前记住播放进度
