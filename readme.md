@@ -1,4 +1,4 @@
-站点 https://github.io/YukiSKR/copy/
+# 站点:https://yukiskr.github.io/copy/
 # 文本切换台 · 纯前端版（部署到 GitHub Pages）
 
 一个纯前端小站：读取仓库 `texts/` 文件夹里的文本，标签页切换，一键复制并弹出提示。
