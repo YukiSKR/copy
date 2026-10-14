@@ -1,0 +1,22 @@
+(() => {
+  const allow = e => e.stopImmediatePropagation(); // 不 preventDefault，保留默认粘贴
+  const types = ['paste', 'copy', 'cut', 'contextmenu'];
+
+  // 捕获阶段抢先执行，阻止网站自己的监听器
+  types.forEach(type => {
+    window.addEventListener(type, allow, true);
+    document.addEventListener(type, allow, true);
+  });
+
+  // 清除内联拦截属性
+  window.onpaste = window.oncopy = window.oncut = window.oncontextmenu = null;
+  document.onpaste = document.oncopy = document.oncut = document.oncontextmenu = null;
+
+  document.querySelectorAll('[onpaste],[oncopy],[oncut],[oncontextmenu]').forEach(el => {
+    ['onpaste', 'oncopy', 'oncut', 'oncontextmenu'].forEach(attr => {
+      el.removeAttribute(attr);
+    });
+  });
+
+  console.log('已尝试解除粘贴/复制/剪切/右键拦截，刷新页面可恢复');
+})();
