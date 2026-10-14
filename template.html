@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>文本切换 · 一键复制</title>
+<style>
+  /* ===== 主题变量：取自封面插画的粉白发色 + 蓝色夜空 ===== */
+  :root {
+    --pink:        #ff9fd0;
+    --pink-deep:   #ff6bb5;
+    --pink-soft:   #ffe4f2;
+    --blue:        #7fb2ff;
+    --blue-deep:   #4a6cf7;
+    --ink:         #3a3157;
+    --ink-soft:    #6d6390;
+    --card:        #fffdfe;
+    --line:        #f0e3f5;
+    --radius:      28px;
+    --shadow:      0 24px 60px -18px rgba(90, 60, 140, .45);
+    --font: "Segoe UI", "PingFang SC", "Microsoft YaHei UI", "Hiragino Sans GB", system-ui, sans-serif;
+    --mono: "Cascadia Code", "JetBrains Mono", Consolas, "Courier New", monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+
+  body {
+    margin: 0;
+    padding: 40px 18px 70px;
+    font-family: var(--font);
+    color: var(--ink);
+    background:
+      radial-gradient(1100px 620px at 12% -8%,  #ffe1f1 0%, transparent 62%),
+      radial-gradient(1000px 640px at 92% 8%,   #dbe9ff 0%, transparent 60%),
+      radial-gradient(900px 700px at 50% 112%,  #ffe8f7 0%, transparent 66%),
+      linear-gradient(180deg, #fdf7ff 0%, #f3f6ff 55%, #fff4fb 100%);
+    background-attachment: fixed;
+    min-height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+  }
+
+  /* ===== 背景漂浮的小星星 / 泡泡 ===== */
+  .bg-fx { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 0; }
+  .bg-fx i {
+    position: absolute; display: block; border-radius: 50%; opacity: .55;
+    animation: drift linear infinite;
+  }
+  .bg-fx i:nth-child(1) { width: 16px; height: 16px; left:  6%; top: 78%; background: #ffc2e2; animation-duration: 17s; }
+  .bg-fx i:nth-child(2) { width: 10px; height: 10px; left: 22%; top: 90%; background: #bcd6ff; animation-duration: 21s; animation-delay: -4s; }
+  .bg-fx i:nth-child(3) { width: 22px; height: 22px; left: 82%; top: 84%; background: #ffd9ef; animation-duration: 25s; animation-delay: -8s; }
+  .bg-fx i:nth-child(4) { width: 13px; height: 13px; left: 68%; top: 94%; background: #cfe2ff; animation-duration: 19s; animation-delay: -2s; }
+  .bg-fx i:nth-child(5) { width:  8px; height:  8px; left: 44%; top: 86%; background: #ffb9dd; animation-duration: 23s; animation-delay: -12s; }
+  .bg-fx i:nth-child(6) { width: 18px; height: 18px; left: 92%; top: 66%; background: #d9c8ff; animation-duration: 27s; animation-delay: -6s; }
+  @keyframes drift {
+    0%   { transform: translateY(0)      scale(1);   opacity: 0; }
+    12%  { opacity: .6; }
+    88%  { opacity: .5; }
+    100% { transform: translateY(-115vh) scale(1.35); opacity: 0; }
+  }
+
+  /* ===== 主卡片 ===== */
+  .card {
+    position: relative;
+    z-index: 1;
+    width: min(880px, 100%);
+    background: var(--card);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    border: 2px solid rgba(255, 255, 255, .9);
+    overflow: hidden;
+    animation: cardIn .7s cubic-bezier(.22, 1.1, .36, 1) both;
+  }
+  @keyframes cardIn {
+    from { opacity: 0; transform: translateY(26px) scale(.975); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  /* ===== 封面 ===== */
+  .cover {
+    position: relative;
+    aspect-ratio: 1280 / 600;
+    background: #16204a url("COVER_DATA_URI") center 26% / cover no-repeat;
+    overflow: hidden;
+  }
+  .cover::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(180deg, rgba(18, 24, 58, .30) 0%, rgba(18, 24, 58, 0) 34%, rgba(24, 20, 58, .72) 100%),
+      linear-gradient(90deg, rgba(255, 140, 200, .20), rgba(90, 140, 255, .20));
+  }
+  .cover-badge {
+    position: absolute; z-index: 2; top: 18px; left: 18px;
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 7px 15px; font-size: 13px; font-weight: 700; letter-spacing: .04em;
+    color: #57305a;
+    background: rgba(255, 255, 255, .82);
+    backdrop-filter: blur(8px);
+    border-radius: 999px;
+    border: 1.5px solid rgba(255, 255, 255, .95);
+    box-shadow: 0 6px 18px -6px rgba(60, 30, 90, .5);
+  }
+  .cover-text {
+    position: absolute; z-index: 2; left: 26px; right: 26px; bottom: 20px;
+    color: #fff;
+    text-shadow: 0 3px 14px rgba(30, 16, 60, .6);
+  }
+  .cover-text h1 {
+    margin: 0 0 6px;
+    font-size: clamp(21px, 3.4vw, 31px);
+    letter-spacing: .02em; line-height: 1.22;
+  }
+  .cover-text p {
+    margin: 0; font-size: clamp(12px, 1.6vw, 14.5px);
+    opacity: .93; font-weight: 500;
+  }
+  /* 拖拽整页时的提示（把 txt 拖进来即可新增标签） */
+  .drop-veil {
+    position: absolute; inset: 0; z-index: 5;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 10px;
+    background: rgba(38, 22, 70, .58);
+    backdrop-filter: blur(4px);
+    color: #fff; font-weight: 800; font-size: 17px; letter-spacing: .04em;
+    opacity: 0; pointer-events: none; transition: opacity .2s ease;
+  }
+  .drop-veil .big { font-size: 40px; animation: bob 1.6s ease-in-out infinite; }
+  .cover.dragging .drop-veil { opacity: 1; }
+  @keyframes bob {
+    0%, 100% { transform: translateY(0) rotate(-5deg); }
+    50%      { transform: translateY(-8px) rotate(5deg); }
+  }
+
+  /* ===== 卡片正文 ===== */
+  .body { padding: 24px clamp(16px, 3.4vw, 30px) 28px; }
+
+  .head-row {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 14px; flex-wrap: wrap; margin-bottom: 13px;
+  }
+  .file-chip {
+    display: inline-flex; align-items: center; gap: 9px;
+    padding: 6px 14px 6px 10px; border-radius: 999px;
+    background: linear-gradient(135deg, var(--pink-soft), #eaf1ff);
+    border: 1.5px dashed #f3c7e2;
+    font-size: 13px; font-weight: 700; color: #7a4d7e;
+  }
+  .file-chip .dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--pink-deep), var(--blue));
+    box-shadow: 0 0 0 3px rgba(255, 155, 205, .22);
+  }
+  .hint { font-size: 12.5px; color: var(--ink-soft); font-weight: 600; }
+
+  /* ===== 标签栏 ===== */
+  .tabs-wrap { position: relative; margin-bottom: 12px; display: flex; align-items: flex-start; gap: 8px; }
+  .tabs {
+    display: flex; gap: 8px; align-items: center;
+    overflow-x: auto; padding: 4px 2px 8px;
+    scrollbar-width: thin;
+    flex: 1 1 auto; min-width: 0;
+  }
+  .tabs::-webkit-scrollbar { height: 7px; }
+  .tabs::-webkit-scrollbar-thumb { background: #e7d9f2; border-radius: 999px; }
+  .tab.refresh { flex: 0 0 auto; margin-top: 4px; }
+
+  .tab {
+    position: relative;
+    flex: 0 0 auto;
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 9px 15px;
+    border-radius: 999px;
+    border: 1.5px solid #f0dcf0;
+    background: #fff;
+    color: #7b6b9c;
+    font-family: var(--font); font-size: 13.5px; font-weight: 700;
+    cursor: pointer;
+    transition: transform .16s, box-shadow .16s, background .16s, color .16s, border-color .16s;
+    white-space: nowrap;
+  }
+  .tab:hover { transform: translateY(-2px); border-color: #f6c4e4; box-shadow: 0 8px 18px -12px rgba(120, 60, 150, .7); }
+  .tab.active {
+    color: #fff;
+    border-color: transparent;
+    background: linear-gradient(135deg, #ff95cd, #8f9dff);
+    box-shadow: 0 10px 22px -12px rgba(190, 80, 170, .85);
+  }
+  .tab .ico { font-size: 14px; line-height: 1; }
+  .tab .cnt {
+    font-size: 11px; font-weight: 800; padding: 2px 7px; border-radius: 999px;
+    background: #f6effc; color: #9683b8;
+  }
+  .tab.active .cnt { background: rgba(255, 255, 255, .3); color: #fff; }
+  .tab .x {
+    display: none; border: none; cursor: pointer; padding: 0 0 0 2px;
+    background: none; color: inherit; font-size: 15px; line-height: 1; opacity: .75;
+  }
+  .tab.dropped .x { display: inline-block; }
+  .tab .x:hover { opacity: 1; transform: scale(1.2); }
+
+  .tab.add {
+    border-style: dashed; color: #b18cc4; background: #fffdfe;
+  }
+  .tab.add:hover { color: #d065a8; }
+
+  /* ===== 代码窗口 ===== */
+  .code-wrap {
+    position: relative;
+    border-radius: 20px;
+    border: 2px solid var(--line);
+    background: linear-gradient(180deg, #fdfaff, #f7f4ff);
+    box-shadow: inset 0 2px 10px rgba(120, 90, 170, .07), 0 12px 30px -20px rgba(90, 60, 140, .5);
+    overflow: hidden;
+  }
+  .titlebar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px;
+    background: linear-gradient(180deg, #fff4fb, #f4f1ff);
+    border-bottom: 1.5px solid var(--line);
+  }
+  .titlebar .lamp { width: 11px; height: 11px; border-radius: 50%; box-shadow: inset 0 -1px 2px rgba(0,0,0,.12); }
+  .lamp.p { background: #ffa8cf; }
+  .lamp.b { background: #a9c8ff; }
+  .lamp.g { background: #b6ecd2; }
+  .titlebar .name {
+    margin-left: 6px; font-family: var(--mono); font-size: 12.5px;
+    font-weight: 700; color: #8a7aa8;
+    max-width: 46%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .titlebar .lines { margin-left: auto; font-size: 11.5px; font-weight: 700; color: #a595bd; }
+
+  pre.code {
+    margin: 0; padding: 16px 18px 20px;
+    max-height: 46vh; overflow: auto;
+    font-family: var(--mono); font-size: 13.2px; line-height: 1.68;
+    color: #453a63; tab-size: 2; white-space: pre;
+  }
+  pre.code::-webkit-scrollbar { width: 11px; height: 11px; }
+  pre.code::-webkit-scrollbar-track { background: #f4effa; }
+  pre.code::-webkit-scrollbar-thumb {
+    border-radius: 999px; border: 3px solid #f4effa;
+    background: linear-gradient(180deg, var(--pink), var(--blue));
+  }
+  pre.code.swap { animation: swapIn .32s ease both; }
+  @keyframes swapIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  .ln {
+    display: inline-block; width: 26px; margin-right: 12px; text-align: right;
+    color: #c9bede; user-select: none; font-weight: 600;
+  }
+  .tk-key { color: #e0509f; font-weight: 700; }
+  .tk-str { color: #3f8f6e; }
+  .tk-fn  { color: #4368d8; }
+  .tk-com { color: #a89bc0; font-style: italic; }
+  .tk-num { color: #cf7a3a; }
+  .tk-pun { color: #8d80a8; }
+
+  .mini-copy {
+    position: absolute; right: 12px; bottom: 12px;
+    cursor: pointer; font-family: var(--font); font-size: 12.5px; font-weight: 800;
+    color: #6c3f78; padding: 8px 13px; border-radius: 999px;
+    background: rgba(255, 255, 255, .9);
+    border: 1.5px solid #f0d5ea;
+    box-shadow: 0 8px 20px -10px rgba(80, 40, 110, .55);
+    backdrop-filter: blur(6px);
+    transition: transform .16s, box-shadow .16s, background .16s;
+  }
+  .mini-copy:hover { transform: translateY(-2px); background: #fff; }
+
+  /* ===== 复制按钮 ===== */
+  .actions { margin-top: 20px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .copy-btn {
+    position: relative; border: none; cursor: pointer;
+    font-family: var(--font); font-size: 16.5px; font-weight: 800; letter-spacing: .03em;
+    color: #fff; padding: 15px 34px; border-radius: 999px;
+    background: linear-gradient(135deg, #ff92ca 0%, #ff77be 40%, #8f9dff 100%);
+    box-shadow: 0 14px 30px -12px rgba(220, 80, 160, .75), inset 0 -3px 0 rgba(120, 40, 110, .18);
+    transition: transform .18s cubic-bezier(.34, 1.56, .64, 1), box-shadow .18s, filter .18s;
+    overflow: hidden; isolation: isolate;
+  }
+  .copy-btn span { position: relative; z-index: 2; display: inline-flex; align-items: center; gap: 10px; }
+  .copy-btn::before {
+    content: ""; position: absolute; inset: 0; z-index: 1;
+    background: linear-gradient(115deg, transparent 32%, rgba(255, 255, 255, .62) 48%, transparent 62%);
+    transform: translateX(-120%); transition: transform .6s ease;
+  }
+  .copy-btn:hover { transform: translateY(-3px) scale(1.035); filter: saturate(1.08); }
+  .copy-btn:hover::before { transform: translateX(120%); }
+  .copy-btn:active { transform: translateY(0) scale(.96); }
+  .copy-btn.done {
+    background: linear-gradient(135deg, #a8e6c4 0%, #7fd8ac 45%, #8fbcff 100%);
+    box-shadow: 0 14px 30px -12px rgba(70, 190, 140, .7), inset 0 -3px 0 rgba(30, 120, 90, .18);
+  }
+  .copy-btn .ico { font-size: 19px; line-height: 1; }
+
+  .meta { font-size: 12.5px; color: var(--ink-soft); font-weight: 600; line-height: 1.6; }
+  .meta b { color: #b0538f; }
+
+  /* ===== 弹出提示 ===== */
+  .toast-layer {
+    position: fixed; inset: 0; z-index: 60;
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+    pointer-events: none;
+  }
+  .toast {
+    pointer-events: auto;
+    width: min(400px, 100%);
+    background: #fff; border-radius: 26px; padding: 22px 22px 18px;
+    text-align: center; border: 2px solid #ffe6f4;
+    box-shadow: 0 30px 70px -22px rgba(90, 40, 120, .6);
+    opacity: 0; transform: translateY(24px) scale(.9);
+    transition: opacity .28s ease, transform .42s cubic-bezier(.2, 1.5, .5, 1);
+    position: relative; overflow: hidden;
+  }
+  .toast::before {
+    content: ""; position: absolute; inset: -40% -10% auto; height: 150px;
+    background: radial-gradient(closest-side, rgba(255, 170, 215, .45), transparent 72%);
+  }
+  .toast.show { opacity: 1; transform: translateY(0) scale(1); }
+  .toast.hide { opacity: 0; transform: translateY(-16px) scale(.94); }
+  .toast .face {
+    position: relative; font-size: 46px; line-height: 1; margin-bottom: 6px;
+    display: inline-block; animation: pop .55s cubic-bezier(.2, 1.7, .5, 1) both;
+  }
+  @keyframes pop {
+    0%   { transform: scale(.3) rotate(-18deg); }
+    60%  { transform: scale(1.16) rotate(6deg); }
+    100% { transform: scale(1) rotate(0); }
+  }
+  .toast h3 { position: relative; margin: 4px 0 6px; font-size: 19px; color: #6b3170; letter-spacing: .02em; }
+  .toast .fname {
+    position: relative; display: inline-block; margin: 0 0 8px;
+    font-family: var(--mono); font-size: 12.5px; font-weight: 700; color: #a0559a;
+    background: #fdf1f8; border: 1.5px dashed #f4cfe7;
+    padding: 3px 12px; border-radius: 999px; max-width: 100%;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .toast p { position: relative; margin: 0 0 14px; font-size: 13.2px; color: var(--ink-soft); font-weight: 600; line-height: 1.6; }
+  .toast .ok-btn {
+    position: relative; border: none; cursor: pointer;
+    font-family: var(--font); font-size: 14px; font-weight: 800; color: #fff;
+    padding: 11px 26px; border-radius: 999px;
+    background: linear-gradient(135deg, #ff95cd, #8f9dff);
+    box-shadow: 0 12px 24px -12px rgba(150, 70, 190, .8);
+    transition: transform .16s;
+  }
+  .toast .ok-btn:hover { transform: translateY(-2px) scale(1.04); }
+
+  .spark {
+    position: fixed; z-index: 70; font-size: 18px; pointer-events: none;
+    animation: sparkFly .95s ease-out forwards;
+  }
+  @keyframes sparkFly {
+    0%   { opacity: 1; transform: translate(0, 0) scale(.6) rotate(0); }
+    100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(1.35) rotate(var(--rot)); }
+  }
+
+  .scrim {
+    position: fixed; inset: 0; z-index: 50;
+    background: rgba(60, 34, 92, .28); backdrop-filter: blur(3px);
+    opacity: 0; transition: opacity .28s ease; pointer-events: none;
+  }
+  .scrim.show { opacity: 1; pointer-events: auto; }
+
+  .empty {
+    padding: 34px 20px; text-align: center; color: #a294bd;
+    font-size: 13.5px; font-weight: 700; line-height: 1.9;
+  }
+  .empty .big { display: block; font-size: 38px; margin-bottom: 8px; }
+
+  .foot { margin-top: 18px; text-align: center; font-size: 11.8px; color: #a294bd; font-weight: 600; letter-spacing: .03em; }
+  .mode-pill {
+    display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px;
+    font-size: 10.5px; font-weight: 800; letter-spacing: .04em;
+    background: #f4eefb; color: #9b86c2; border: 1px solid #ece2f7;
+  }
+  .mode-pill.snap { background: #fff1f8; color: #c2649c; border-color: #f8d8ec; }
+  .tab .snap-dot { font-size: 11px; opacity: .85; }
+
+  @media (max-width: 520px) {
+    body { padding: 18px 10px 50px; }
+    .cover { aspect-ratio: 1280 / 700; }
+    .copy-btn { width: 100%; justify-content: center; }
+    .actions { gap: 10px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-fx" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+
+<main class="card">
+  <!-- ================= 封面（插画） ================= -->
+  <header class="cover" id="cover" role="img" aria-label="封面插画：粉色长发天使少女趴在床上">
+    <div class="cover-badge">✨ 文本切换台</div>
+    <div class="cover-text">
+      <h1>多文本切换 · 一键复制</h1>
+      <p>上面切换标签页选内容，下面点按钮整段复制带走～也可以把 txt 直接拖进来</p>
+    </div>
+    <div class="drop-veil">
+      <span class="big">📥</span>
+      <span>松手即可添加这个 txt 标签</span>
+    </div>
+  </header>
+
+  <!-- ================= 正文 ================= -->
+  <section class="body">
+    <div class="head-row">
+      <div class="file-chip"><span class="dot"></span><span id="chipName">—</span></div>
+      <div class="hint" id="lineHint">—</div>
+    </div>
+
+    <!-- 标签栏：切换 texts/ 里的文件 + 重读按钮 -->
+    <div class="tabs-wrap">
+      <div class="tabs" id="tabs" role="tablist"></div>
+      <button class="tab add refresh" id="refresh" type="button" title="重新读取 texts/ 文件夹的文件清单">
+        <span class="ico">🔄</span><span>重新读取</span>
+      </button>
+    </div>
+
+    <div class="code-wrap">
+      <div class="titlebar">
+        <span class="lamp p"></span><span class="lamp b"></span><span class="lamp g"></span>
+        <span class="name" id="fileName">—</span>
+        <span class="lines" id="encLabel">UTF-8</span>
+      </div>
+      <pre class="code" id="code" tabindex="0" aria-label="文本内容"></pre>
+      <button class="mini-copy" id="miniCopy" type="button">复制</button>
+    </div>
+
+    <div class="actions">
+      <button class="copy-btn" id="copyBtn" type="button">
+        <span><i class="ico">📋</i><em id="btnText" style="font-style:normal">一键复制当前内容</em></span>
+      </button>
+      <div class="meta">复制后会弹出确认提示 🎀<br />支持 <b>Ctrl + V</b> 直接粘贴使用</div>
+    </div>
+
+    <div class="foot">
+      <span id="footMode">正在读取 texts/ …</span>
+      <span class="mode-pill" id="footCount">0 个文件</span>
+      <span class="mode-pill" id="footSrc" style="display:none">离线快照</span>
+    </div>
+  </section>
+</main>
+
+<!-- 离线快照：build.py 把 texts/ 的内容打进这里。
+     双击（file://）打开时用它，部署后优先用实时的 texts/ 文件夹。 -->
+<script type="application/json" id="snapshot">SNAPSHOT_B64</script>
+
+<!-- 遮罩 + 弹出提示 -->
+<div class="scrim" id="scrim"></div>
+<div class="toast-layer" id="toastLayer" aria-live="polite">
+  <div class="toast" id="toast" role="dialog" aria-modal="true" aria-labelledby="toastTitle">
+    <div class="face" id="toastFace">🎉</div>
+    <h3 id="toastTitle">复制成功啦！</h3>
+    <div class="fname" id="toastFile">—</div>
+    <p id="toastMsg">全部内容已在剪贴板中，<br />去需要的地方 Ctrl + V 粘贴即可 ✨</p>
+    <button class="ok-btn" id="okBtn" type="button">好耶，知道啦</button>
+  </div>
+</div>
+
+<!-- 文件输入：点击“+ 添加 txt”时使用 -->
+<input type="file" id="filePicker" accept=".txt,.md,.json,.js,.css,.html,text/*" multiple hidden />
+
+<script>
+  const LS_KEY   = 'txt-copy-card.dropped.v1';
+  const LS_LIMIT = 900 * 1024;          // 拖入文件的总容量上限（localStorage 常用上限约 5MB）
+
+  const KEYWORDS = ['const','let','var','function','return','if','else','for','forEach',
+                    'true','false','null','window','document','console','typeof','new','try','catch'];
+
+  const $ = id => document.getElementById(id);
+  const el = {
+    tabs: $('tabs'), code: $('code'), chipName: $('chipName'), lineHint: $('lineHint'),
+    fileName: $('fileName'), encLabel: $('encLabel'), btnText: $('btnText'), footMode: $('footMode'),
+    footCount: $('footCount'), cover: $('cover'), picker: $('filePicker'),
+    miniCopy: $('miniCopy'), copyBtn: $('copyBtn'), refresh: $('refresh'), footSrc: $('footSrc'),
+  };
+
+  let FILES = [];        // [{ id, name, content, dropped }]
+  let activeId = null;
+
+  /* ---------- 拖进来的临时文件：存在浏览器本地 ---------- */
+  function droppedFiles() {
+    try {
+      const raw = localStorage.getItem(LS_KEY);
+      if (!raw) return [];
+      return JSON.parse(raw).map(f => ({ ...f, dropped: true }));
+    } catch (e) { return []; }
+  }
+
+  function saveDropped() {
+    const mine = FILES.filter(f => f.dropped).map(({ id, name, content }) => ({ id, name, content }));
+    const size = mine.reduce((n, f) => n + f.content.length, 0);
+    if (size > LS_LIMIT) return { ok: false, reason: 'too-big' };
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify(mine));
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, reason: 'quota' };
+    }
+  }
+
+  /* ================== 数据来源：直接读取 texts/ 文件夹 ==================
+     ① texts/index.json —— 文件清单（build.py 生成 / GitHub Action 自动更新）
+     ② 没有清单时，回退探测下面这些常见文件名（放一个清单文件更靠谱）
+     GitHub Pages 是纯静态托管，浏览器没法列目录，所以要用清单来“点名”。
+     本地想预览请跑  python build.py  再用本地服务打开（file:// 会被浏览器拦截）。 */
+  const TEXTS_DIR   = 'texts/';
+  const MANIFEST    = TEXTS_DIR + 'index.json';
+  const TEXT_EXTS   = ['.txt', '.md', '.json', '.js', '.css', '.html', '.log', '.csv'];
+  const FALLBACK    = ['copy.txt', 'text.txt', 'text1.txt', 'text2.txt',
+                       'readme.md', 'notes.txt', 'content.txt', 'snippet.txt'];
+  const NO_CACHE    = { cache: 'no-store' };
+
+  const isTexty = name => TEXT_EXTS.some(x => name.toLowerCase().endsWith(x));
+
+  /* 文件名排序：数字感知（text2 在 text10 前）+ 不依赖 locale，
+     保证「在线读取」和「离线快照」两种模式的标签顺序完全一致 */
+  function naturalCompare(a, b) {
+    const pa = a.toLowerCase().match(/\d+|\D+/g) || [];
+    const pb = b.toLowerCase().match(/\d+|\D+/g) || [];
+    for (let i = 0; i < Math.min(pa.length, pb.length); i++) {
+      const x = pa[i], y = pb[i];
+      const nx = /^\d+$/.test(x), ny = /^\d+$/.test(y);
+      if (nx && ny) {
+        const d = Number(x) - Number(y);
+        if (d) return d;
+      } else if (x !== y) {
+        return x < y ? -1 : 1;
+      }
+    }
+    return pa.length - pb.length;
+  }
+
+  async function fetchManifest() {
+    try {
+      const res = await fetch(MANIFEST, NO_CACHE);
+      if (!res.ok) return null;
+      const data = await res.json();
+      const names = (Array.isArray(data) ? data : data.files || [])
+        .map(f => (typeof f === 'string' ? f : f && f.name))
+        .filter(n => n && isTexty(n));
+      return names.length ? names : null;
+    } catch (e) { return null; }
+  }
+
+  async function probe(names) {
+    const found = [];
+    await Promise.all(names.map(async name => {
+      try {
+        const res = await fetch(TEXTS_DIR + encodeURIComponent(name), NO_CACHE);
+        if (!res.ok) return;
+        const body = await res.text();
+        // 404 页面（HTML）不算，避免把错误页当成文本
+        if (/^\s*<(!doctype|html)/i.test(body)) return;
+        found.push({ name, body });
+      } catch (e) { /* 忽略 */ }
+    }));
+    return found;
+  }
+
+  /* ---------- 离线快照（index.html 内自带的文本，双击也能看） ---------- */
+  function snapshotFiles() {
+    try {
+      const node = $('snapshot');
+      const b64 = (node && node.textContent || '').trim();
+      if (!b64) return [];
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const data = JSON.parse(new TextDecoder('utf-8').decode(bytes));
+      const list = Array.isArray(data) ? data : (data.files || []);
+      return list
+        .filter(f => f && f.name && typeof f.content === 'string')
+        .map(f => ({ id: f.name, name: f.name, content: f.content, embedded: true }));
+    } catch (e) { return []; }
+  }
+
+  async function loadFolder() {
+    const listed = await fetchManifest();
+    const kind   = listed ? '清单 index.json' : '文件名探测';
+
+    const cached = new Map();
+    const probeList = listed ? [] : FALLBACK;
+    (await probe(probeList)).forEach(f => cached.set(f.name, f.body));
+
+    // 清单里的文件 + 探测到的文件，合并去重（清单优先）
+    const names = [...new Set([...(listed || []), ...cached.keys()])].sort(naturalCompare);
+
+    const missing = [];
+    const files = (await Promise.all(names.map(async name => {
+      let body = cached.get(name);
+      if (body === undefined) {
+        try {
+          const res = await fetch(TEXTS_DIR + encodeURIComponent(name), NO_CACHE);
+          if (!res.ok) { missing.push(name); return null; }
+          body = await res.text();
+        } catch (e) { missing.push(name); return null; }
+      }
+      return { id: name, name, content: body.replace(/\r\n/g, '\n').replace(/\s+$/, '') };
+    }))).filter(Boolean);
+
+    return { files, kind, missing };
+  }
+
+
+  /* ---------- 语法高亮（先转义，再加标签，绝对安全） ---------- */
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const RE = /\/\/[^\n]*|'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|\b\d+\b|[A-Za-z_$][\w$]*|[^\w\s]+/g;
+
+  function highlight(line) {
+    let out = '', last = 0;
+    for (const m of line.matchAll(RE)) {
+      out += esc(line.slice(last, m.index));
+      last = m.index + m[0].length;
+      const t = m[0], c0 = t[0];
+      let cls;
+      if (t.startsWith('//'))            cls = 'tk-com';
+      else if (c0 === '"' || c0 === "'") cls = 'tk-str';
+      else if (/^\d+$/.test(t))          cls = 'tk-num';
+      else if (/^[A-Za-z_$]/.test(t))    cls = KEYWORDS.includes(t) ? 'tk-key' : 'tk-fn';
+      else                               cls = 'tk-pun';
+      out += '<span class="' + cls + '">' + esc(t) + '</span>';
+    }
+    return out + esc(line.slice(last));
+  }
+
+  function renderCode(file) {
+    const lines = file.content.length ? file.content.replace(/\r\n/g, '\n').split('\n') : [''];
+    const w = String(lines.length).length;
+    el.code.innerHTML = lines
+      .map((l, i) => '<span class="ln">' + String(i + 1).padStart(w) + '</span>' + highlight(l))
+      .join('\n');
+    el.code.scrollTop = 0;
+    el.code.scrollLeft = 0;
+  }
+
+  /* ---------- 渲染：标签栏 + 当前文件 ---------- */
+  function renderTabs() {
+    el.tabs.innerHTML = '';
+    FILES.forEach(f => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'tab' + (f.id === activeId ? ' active' : '') + (f.dropped ? ' dropped' : '');
+      b.setAttribute('role', 'tab');
+      b.innerHTML = '<span class="ico">' + (f.dropped ? '📎' : f.embedded ? '📦' : '📄') + '</span>' +
+                    '<span class="fname"></span>' +
+                    (f.embedded ? '<span class="snap-dot" title="来自 index.html 的离线快照">·快照</span>' : '') +
+                    '<span class="cnt">' + (f.content ? f.content.replace(/\r\n/g, '\n').split('\n').length : 0) + '</span>' +
+                    (f.dropped ? '<button class="x" title="移除这个标签">×</button>' : '');
+      b.querySelector('.fname').textContent = f.name;
+      b.addEventListener('click', () => select(f.id));
+      const x = b.querySelector('.x');
+      if (x) x.addEventListener('click', ev => { ev.stopPropagation(); removeFile(f.id); });
+      el.tabs.appendChild(b);
+    });
+
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'tab add';
+    add.innerHTML = '<span class="ico">＋</span><span>添加 txt</span>';
+    add.title = '选择本地 txt 文件（也可以直接把文件拖到页面上）';
+    add.addEventListener('click', () => el.picker.click());
+    el.tabs.appendChild(add);
+
+    // 重新扫描 texts/ 文件夹的按钮是静态的（在 .tabs-wrap 里），不会被这里清掉
+
+    el.footCount.textContent = FILES.length + ' 个文件';
+  }
+
+  function select(id) {
+    activeId = id;
+    const f = FILES.find(x => x.id === id);
+    if (!f) return;
+    renderCode(f);
+    renderTabs();
+
+    const lines = f.content ? f.content.replace(/\r\n/g, '\n').split('\n').length : 0;
+    el.chipName.textContent = f.name;
+    el.fileName.textContent = f.name;
+    el.lineHint.textContent = '共 ' + lines + ' 行 · 单击正文可全选' +
+      (f.embedded ? ' · 离线快照' : '');
+    el.copyBtn.classList.remove('done');
+    el.btnText.textContent = '一键复制当前内容';
+    el.miniCopy.textContent = '复制';
+
+    el.code.classList.remove('swap');
+    void el.code.offsetWidth;
+    el.code.classList.add('swap');
+  }
+
+  function addFile(name, content, { dropped = true, save = true } = {}) {
+    let base = name.replace(/\.(txt|md|json|js|css|html)$/i, '') || 'text';
+    let id = name;
+    let n = 2;
+    while (FILES.some(f => f.id === id)) id = base + '(' + n++ + ').txt';
+    const f = { id, name: id, content: content.replace(/\r\n/g, '\n').replace(/\s+$/, ''), dropped };
+    FILES.push(f);
+    let saved = { ok: true };
+    if (save && dropped) saved = saveDropped();
+    select(f.id);
+    return saved;
+  }
+
+  function removeFile(id) {
+    FILES = FILES.filter(f => f.id !== id);
+    saveDropped();
+    if (activeId === id) {
+      if (FILES.length) select(FILES[0].id);
+      else { activeId = null; showEmpty(); }
+    } else renderTabs();
+  }
+
+  function showEmpty(isError) {
+    el.code.innerHTML = '<span class="empty"><span class="big">' + (isError ? '🔌' : '🗂️') + '</span>' +
+      (isError
+        ? '没能读取 ' + TEXTS_DIR + ' 文件夹。<br />确认页面是通过网址访问的（GitHub Pages / 本地服务），<br />' +
+          '并且 texts/ 里有文本文件、texts/index.json 清单存在。'
+        : 'texts 文件夹还是空的：把 .txt 丢进去，跑一次 <b>python build.py</b>（或提交到 GitHub 让 Action 自动更新清单），刷新即可。') +
+      '<br />也可以现在就把 txt <b>拖进页面</b>，或点「＋ 添加 txt」临时看。</span>';
+    el.tabs.innerHTML = '';
+    renderTabs();
+    el.chipName.textContent = '（空）';
+    el.fileName.textContent = '—';
+    el.lineHint.textContent = '共 0 行';
+  }
+
+  /* ---------- 复制 ---------- */
+  const scrim = $('scrim'), toast = $('toast');
+  const face = $('toastFace'), titleEl = $('toastTitle'), msgEl = $('toastMsg'), fileEl = $('toastFile');
+  let hideTimer = null;
+
+  function showToast(kind, name) {
+    clearTimeout(hideTimer);
+    const conf = {
+      ok:    { face: '🎉', title: '复制成功啦！', msg: '全部内容已在剪贴板中，<br />去需要的地方 Ctrl + V 粘贴即可 ✨' },
+      fail:  { face: '😿', title: '复制失败了…', msg: '浏览器拒绝了剪贴板访问，<br />请手动全选正文后按 Ctrl + C 复制～' },
+      saved: { face: '📎', title: '标签添加好啦！', msg: '这个 txt 已加进标签栏，<br />刷新页面也不会丢（存在浏览器本地）' },
+      nostore: { face: '🥲', title: '添加成功，但没能记住', msg: '浏览器本地存储已满或被禁用，<br />刷新页面后这个标签会消失' },
+      reloaded: { face: '🔄', title: '文件列表已更新', msg: '发现新的文本，标签栏已重新排列。<br />想永久保留就把它提交到仓库里～' },
+      same: { face: '🐣', title: '没有发现新文件', msg: '文件夹里的文本和刚才一样。<br />新加的 txt 记得让 index.json 清单一并更新。' },
+    }[kind];
+
+    face.textContent = conf.face;
+    titleEl.textContent = conf.title;
+    msgEl.innerHTML = conf.msg;
+    fileEl.textContent = name || '';
+    fileEl.style.display = name ? 'inline-block' : 'none';
+
+    scrim.classList.add('show');
+    toast.classList.remove('hide');
+    toast.classList.add('show');
+    face.style.animation = 'none';
+    void face.offsetWidth;
+    face.style.animation = '';
+    hideTimer = setTimeout(hideToast, kind === 'ok' ? 3200 : 4200);
+  }
+
+  function hideToast() {
+    clearTimeout(hideTimer);
+    scrim.classList.remove('show');
+    toast.classList.remove('show');
+    toast.classList.add('hide');
+    setTimeout(() => toast.classList.remove('hide'), 320);
+  }
+  scrim.addEventListener('click', hideToast);
+  $('okBtn').addEventListener('click', hideToast);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') hideToast(); });
+
+  function copyText(text) {
+    if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
+    return new Promise((resolve, reject) => {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text; ta.setAttribute('readonly', '');
+        ta.style.cssText = 'position:fixed;top:-1000px;opacity:0';
+        document.body.appendChild(ta);
+        ta.select(); ta.setSelectionRange(0, ta.value.length);
+        const ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        ok ? resolve() : reject(new Error('execCommand failed'));
+      } catch (err) { reject(err); }
+    });
+  }
+
+  function sparks(x, y) {
+    const chars = ['✨', '💗', '⭐', '🎀', '💫', '🩷'];
+    for (let i = 0; i < 10; i++) {
+      const s = document.createElement('span');
+      s.className = 'spark';
+      s.textContent = chars[i % chars.length];
+      const ang = (Math.PI * 2 * i) / 10 + Math.random() * .6;
+      const dist = 70 + Math.random() * 85;
+      s.style.left = x + 'px';
+      s.style.top = y + 'px';
+      s.style.setProperty('--dx', Math.cos(ang) * dist + 'px');
+      s.style.setProperty('--dy', (Math.sin(ang) * dist - 34) + 'px');
+      s.style.setProperty('--rot', (Math.random() * 260 - 130) + 'deg');
+      document.body.appendChild(s);
+      setTimeout(() => s.remove(), 1000);
+    }
+  }
+
+  function handleCopy(btn) {
+    const f = FILES.find(x => x.id === activeId);
+    if (!f) { showToast('fail'); return; }
+    copyText(f.content).then(() => {
+      const r = btn.getBoundingClientRect();
+      sparks(r.left + r.width / 2, r.top + r.height / 2);
+      if (btn === el.copyBtn) {
+        el.copyBtn.classList.add('done');
+        const old = el.btnText.textContent;
+        el.btnText.textContent = '已复制！';
+        setTimeout(() => { el.copyBtn.classList.remove('done'); el.btnText.textContent = old; }, 2200);
+      } else {
+        el.miniCopy.textContent = '已复制 ✓';
+        setTimeout(() => { el.miniCopy.textContent = '复制'; }, 1800);
+      }
+      showToast('ok', f.name);
+    }).catch(() => showToast('fail', f.name));
+  }
+  el.copyBtn.addEventListener('click', () => handleCopy(el.copyBtn));
+  el.miniCopy.addEventListener('click', () => handleCopy(el.miniCopy));
+
+  /* ---------- 单击正文自动全选 ---------- */
+  el.code.addEventListener('click', () => {
+    const sel = window.getSelection();
+    if (sel && sel.toString().length === 0 && FILES.length) {
+      const range = document.createRange();
+      range.selectNodeContents(el.code);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+  });
+
+  /* ---------- 拖拽 / 选择本地 txt ---------- */
+  const TEXT_RE = /\.(txt|md|json|js|css|html|log|csv)$/i;
+
+  function readFile(file) {
+    return new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(String(fr.result));
+      fr.onerror = () => reject(fr.error);
+      fr.readAsText(file, 'utf-8');
+    });
+  }
+
+  async function addFromFileList(list) {
+    const files = Array.from(list).filter(f => TEXT_RE.test(f.name) || f.type.startsWith('text/'));
+    if (!files.length) return;
+    let last = { ok: true };
+    for (const f of files) {
+      try {
+        const text = await readFile(f);
+        last = addFile(f.name, text, { dropped: true, save: false });
+      } catch (e) { /* 读不了就跳过 */ }
+    }
+    last = saveDropped();
+    renderTabs();
+    showToast(last.ok ? 'saved' : 'nostore', files.map(f => f.name).join('、'));
+  }
+
+  el.picker.addEventListener('change', () => {
+    if (el.picker.files.length) addFromFileList(el.picker.files);
+    el.picker.value = '';
+  });
+
+  let dragDepth = 0;
+  window.addEventListener('dragenter', e => {
+    if (!Array.from(e.dataTransfer.types || []).includes('Files')) return;
+    e.preventDefault();
+    dragDepth++;
+    el.cover.classList.add('dragging');
+  });
+  window.addEventListener('dragover', e => {
+    if (Array.from(e.dataTransfer.types || []).includes('Files')) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    }
+  });
+  window.addEventListener('dragleave', () => {
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (!dragDepth) el.cover.classList.remove('dragging');
+  });
+  window.addEventListener('drop', e => {
+    if (!Array.from(e.dataTransfer.types || []).includes('Files')) return;
+    e.preventDefault();
+    dragDepth = 0;
+    el.cover.classList.remove('dragging');
+    if (e.dataTransfer.files.length) addFromFileList(e.dataTransfer.files);
+  });
+
+  /* ---------- 启动 ---------- */
+  async function reloadFromFolder(keepId) {
+    el.footMode.textContent = '正在读取 ' + TEXTS_DIR + ' …';
+    let res;
+    try {
+      res = await loadFolder();
+    } catch (e) {
+      res = { files: [], kind: null, missing: [], error: e.message };
+    }
+
+    const keep = keepId || activeId;
+
+    // 实时读取成功 → 用最新的；读取失败（含 file:// 双击）→ 用 index.html 里的离线快照
+    if (res.files.length) {
+      FILES = res.files.concat(droppedFiles());
+      el.footMode.textContent = '数据来源：' + TEXTS_DIR + res.kind;
+      el.footSrc.style.display = 'none';
+    } else {
+      const snap = snapshotFiles();
+      FILES = snap.concat(droppedFiles());
+      if (snap.length) {
+        el.footMode.textContent = '离线快照（index.html 自带，' + snap.length + ' 个文件）';
+        el.footSrc.textContent = '双击可看 · 部署后自动读 texts/';
+        el.footSrc.className = 'mode-pill snap';
+        el.footSrc.style.display = 'inline-block';
+      } else {
+        el.footMode.textContent = '数据来源：' + TEXTS_DIR + '（读取失败）';
+        el.footSrc.style.display = 'none';
+      }
+    }
+
+    if (!FILES.length) { showEmpty(true); return; }
+    select(FILES.some(f => f.id === keep) ? keep : FILES[0].id);
+
+    if (res.missing && res.missing.length) {
+      console.warn('这些文件在清单里但没取到：', res.missing);
+    }
+  }
+
+  el.refresh.addEventListener('click', async () => {
+    const before = FILES.filter(f => !f.dropped).map(f => f.id).join('|');
+    await reloadFromFolder();
+    const after = FILES.filter(f => !f.dropped).map(f => f.id).join('|');
+    showToast(before === after ? 'same' : 'reloaded', TEXTS_DIR + ' 文件夹');
+  });
+
+  (async function init() {
+    await reloadFromFolder();
+    // 离线快照也没有（没跑过 build.py）时，给一句人能看懂的提示
+    if (!FILES.length && location.protocol === 'file:') {
+      el.code.innerHTML = '<span class="empty"><span class="big">📁</span>' +
+        '用 file:// 双击打开时，浏览器不允许网页读取本地文件夹，而这份 index.html 里也没有离线快照。<br />' +
+        '解决办法：本地执行一次 <b>python build.py</b>（把 texts/ 的内容打进 index.html），<br />' +
+        '或者部署到 GitHub Pages —— 两种方式双击或访问都能看。<br />' +
+        '也可以先把 txt <b>拖进这个页面</b>，或点「＋ 添加 txt」临时添加。</span>';
+    }
+  })();
+</script>
+</body>
+</html>
