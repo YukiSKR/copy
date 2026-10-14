@@ -613,6 +613,19 @@
   const NO_CACHE    = { cache: 'no-store' };
   const DISCOVER_KEY = 'txt-copy-card.discover.v1';
 
+  /* 带超时的 fetch：移动网络下请求可能一直挂着，
+     超时就直接失败 -> 页面立刻退回到 index.html 内嵌的快照，而不是干等。 */
+  async function fetchTO(url, opt = {}, ms = 5000) {
+    const ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    const timer = ctl ? setTimeout(() => ctl.abort(), ms) : null;
+    try {
+      return await fetch(url, ctl ? Object.assign({}, opt, { signal: ctl.signal }) : opt);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+  const HTML_RE = /^\s*<(!doctype|html)/i;   // 404 页面不算文本
+
   const isTexty = name => TEXT_EXTS.some(x => name.toLowerCase().endsWith(x));
 
   /* 文件名排序：数字感知（text2 在 text10 前）+ 不依赖 locale，
@@ -637,7 +650,7 @@
 
   async function fetchManifest() {
     try {
-      const res = await fetch(MANIFEST, NO_CACHE);
+      const res = await fetchTO(MANIFEST, NO_CACHE, 5000);
       if (!res.ok) return null;
       const text = (await res.text()).trim();
       if (!text) { manifestBroken = true; return null; }   // 空清单 = 坏了
@@ -656,11 +669,10 @@
     const found = [];
     await Promise.all(names.map(async name => {
       try {
-        const res = await fetch(TEXTS_DIR + encodeURIComponent(name), NO_CACHE);
+        const res = await fetchTO(TEXTS_DIR + encodeURIComponent(name), NO_CACHE, 8000);
         if (!res.ok) return;
         const body = await res.text();
-        // 404 页面（HTML）不算，避免把错误页当成文本
-        if (/^\s*<(!doctype|html)/i.test(body)) return;
+        if (HTML_RE.test(body)) return;
         found.push({ name, body });
       } catch (e) { /* 忽略 */ }
     }));
@@ -712,8 +724,8 @@
 
     // ① jsDelivr 目录列表（不限流，最靠谱）
     try {
-      const res = await fetch('https://data.jsdelivr.com/v1/packages/gh/' + REPO +
-                              '@main?structure=flat', NO_CACHE);
+      const res = await fetchTO('https://data.jsdelivr.com/v1/packages/gh/' + REPO +
+                                '@main?structure=flat', NO_CACHE, 5000);
       if (res.ok) {
         const data = await res.json();
         names = (data.files || [])
@@ -727,8 +739,8 @@
     // ② GitHub API（可能被限流）
     if (!names.length) {
       try {
-        const res = await fetch('https://api.github.com/repos/' + REPO + '/contents/' +
-                                TEXTS_DIR.replace(/\/$/, ''), NO_CACHE);
+        const res = await fetchTO('https://api.github.com/repos/' + REPO + '/contents/' +
+                                  TEXTS_DIR.replace(/\/$/, ''), NO_CACHE, 5000);
         if (res.ok) {
           const data = await res.json();
           names = (Array.isArray(data) ? data : [])
@@ -755,10 +767,10 @@
     urls.push(TEXTS_DIR + encodeURIComponent(name));
     for (const u of urls) {
       try {
-        const res = await fetch(u, NO_CACHE);
+        const res = await fetchTO(u, NO_CACHE, 8000);
         if (!res.ok) continue;
         const body = await res.text();
-        if (/^\s*<(!doctype|html)/i.test(body)) continue;
+        if (HTML_RE.test(body)) continue;
         return body;
       } catch (e) { /* 换下一个源 */ }
     }
@@ -784,14 +796,20 @@
     const extra = discovered.filter(n => !names.includes(n));
 
     const missing = [];
+    let done = 0;
     const files = (await Promise.all(names.map(async name => {
       let body = cached.get(name);
       if (body === undefined) {
         try {
-          const res = await fetch(TEXTS_DIR + encodeURIComponent(name), NO_CACHE);
+          const res = await fetchTO(TEXTS_DIR + encodeURIComponent(name), NO_CACHE, 8000);
           if (!res.ok) { missing.push(name); return null; }
           body = await res.text();
         } catch (e) { missing.push(name); return null; }
+      }
+      done++;
+      if (names.length > 1) {          // 只有多于一个文件时才刷进度，避免闪烁
+        el.footMode.textContent =
+          '即时显示 · 正在核对最新内容…（' + done + '/' + names.length + '）';
       }
       return { id: name, name, content: body.replace(/\r\n/g, '\n').replace(/\s+$/, '') };
     }))).filter(Boolean);
@@ -946,6 +964,7 @@
       nostore: { face: '🥲', title: '添加成功，但没能记住', msg: '浏览器本地存储已满或被禁用，<br />刷新页面后这个标签会消失' },
       reloaded: { face: '🔄', title: '文件列表已更新', msg: '发现新的文本，标签栏已重新排列。<br />想永久保留就把它提交到仓库里～' },
       same: { face: '🐣', title: '没有发现新文件', msg: '文件夹里的文本和刚才一样。<br />新加的 txt 记得让 index.json 清单一并更新。' },
+      reloadfail: { face: '🐢', title: '实时读取没成功', msg: '网络超时或清单取不到，你看到的仍是 index.html 内嵌的快照。<br />过会儿再点一次「🔄 重新读取」试试。' },
       bgmfail: { face: '🎧', title: '音乐没能加载', msg: '找不到 <b>bgm.mp3</b>，或浏览器不允许读取本地音频。<br />部署后的网址一定可以播放～' },
       bgmload: { face: '🐢', title: '音乐还没准备好', msg: '音频较大（约 9 MB），首次播放要等它缓冲一下。<br />请再点一次按钮试试～' },
       bgmblock: { face: '🔇', title: '浏览器拦住了播放', msg: '这是浏览器的自动播放策略：<br />需要你<b>再点一次</b>按钮，声音才会出来。<br />（换设备后第一次播放常会遇到）' },
@@ -1242,13 +1261,14 @@
     } else {
       const snap = snapshotFiles();
       FILES = snap.concat(droppedFiles());
+      const why = res.error ? '实时读取失败/超时' : '仓库里还没有文本';
       if (snap.length) {
-        el.footMode.textContent = '离线快照（index.html 自带，' + snap.length + ' 个文件）';
-        el.footSrc.textContent = '双击可看 · 部署后自动读 texts/';
+        el.footMode.textContent = '数据来源：内嵌快照（' + why + '）';
+        el.footSrc.textContent = '快照 ' + snap.length + ' 个 · 双击打开也是这份';
         el.footSrc.className = 'mode-pill snap';
         el.footSrc.style.display = 'inline-block';
       } else {
-        el.footMode.textContent = '数据来源：' + TEXTS_DIR + '（读取失败）';
+        el.footMode.textContent = '数据来源：' + TEXTS_DIR + '（' + why + '）';
         el.footSrc.style.display = 'none';
       }
     }
@@ -1264,25 +1284,55 @@
   el.refresh.addEventListener('click', async () => {
     const before = FILES.filter(f => !f.dropped).map(f => f.id).join('|');
     try { sessionStorage.removeItem(DISCOVER_KEY); } catch (e) { /* 忽略 */ }
+    let failed = false;
+    try {
+      const res = await loadFolder();
+      if (!res.files.length) failed = true;
+    } catch (e) { failed = true; }
     await reloadFromFolder();
     const after = FILES.filter(f => !f.dropped).map(f => f.id).join('|');
-    showToast(before === after ? 'same' : 'reloaded', TEXTS_DIR + ' 文件夹');
+    showToast(failed ? 'reloadfail' : (before === after ? 'same' : 'reloaded'),
+              TEXTS_DIR + ' 文件夹');
   });
 
+  /* 把一组文件装进界面（首屏快照和后台实时结果共用） */
+  function applyFiles(list, keepId) {
+    FILES = list;
+    if (!FILES.length) { showEmpty(true); return; }
+    const keep = keepId || activeId;
+    select(FILES.some(f => f.id === keep) ? keep : FILES[0].id);
+  }
+
   (async function init() {
-    try {
-      await reloadFromFolder();
-    } catch (e) {
-      console.error('初始化失败：', e);
-      showEmpty(true);
+    /* ---- 第一步：立刻用 index.html 内嵌的快照渲染（0 网络请求，不白屏）---- */
+    const snap = snapshotFiles();
+    if (snap.length) {
+      applyFiles(snap.concat(droppedFiles()));
+      el.footMode.textContent = '即时显示 · 正在核对最新内容…';
+      el.footSrc.textContent = `快照 ${snap.length} 个 · 后台核对中`;
+      el.footSrc.className = 'mode-pill snap';
+      el.footSrc.style.display = 'inline-block';
+    } else if (droppedFiles().length) {
+      applyFiles(droppedFiles());
     }
-    // 离线快照也没有（没跑过 build.py）时，给一句人能看懂的提示
-    if (!FILES.length && location.protocol === 'file:') {
+
+    /* ---- 第二步：后台读取真实的 texts/；拿到了再无缝替换 ----
+       这样首屏只等 index.html 本身（约 1 秒），
+       不必再串行等「清单 448ms → 每个文本 500ms+」。 */
+    if (location.protocol === 'file:' && !snap.length) {
       el.code.innerHTML = '<span class="empty"><span class="big">📁</span>' +
         '用 file:// 双击打开时，浏览器不允许网页读取本地文件夹，而这份 index.html 里也没有离线快照。<br />' +
         '解决办法：本地执行一次 <b>python build.py</b>（把 texts/ 的内容打进 index.html），<br />' +
         '或者部署到 GitHub Pages —— 两种方式双击或访问都能看。<br />' +
         '也可以先把 txt <b>拖进这个页面</b>，或点「＋ 添加 txt」临时添加。</span>';
+      return;
+    }
+
+    try {
+      await reloadFromFolder();
+    } catch (e) {
+      console.error('后台读取 texts/ 失败：', e);
+      if (!FILES.length) showEmpty(true);
     }
   })();
 </script>

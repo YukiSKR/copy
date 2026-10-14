@@ -61,6 +61,31 @@ def check_manifest(path: pathlib.Path):
     print(f"  清单自检通过：{len(data['files'])} 个条目")
 
 
+def inline_cover(path: pathlib.Path, max_w: int = 1200, quality: int = 82):
+    """封面转成「适合网页内嵌」的 JPEG 字节。
+    内嵌的图片会直接计入 index.html 体积，而首屏时间几乎等于这个体积，
+    所以超过 1200px 宽就等比缩小、并按 quality 重压；失败时退回原图。"""
+    raw = path.read_bytes()
+    try:
+        from PIL import Image
+        import io
+        img = Image.open(io.BytesIO(raw)).convert("RGB")
+        w, h = img.size
+        need = w > max_w
+        if need:
+            img = img.resize((max_w, round(h * max_w / w)), Image.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=quality, optimize=True, progressive=True)
+        out = buf.getvalue()
+        if len(out) < len(raw):
+            note = (f"已压缩 {len(raw):,} -> {len(out):,} bytes"
+                    + (f"（{w}px 缩到 {max_w}px q{quality}）" if need else f"（q{quality}）"))
+            return out, note
+    except Exception as e:
+        print(f"  [提示] 封面压缩跳过（{type(e).__name__}: {e}），用原图")
+    return raw, f"原图 {len(raw):,} bytes"
+
+
 def collect():
     TEXTS.mkdir(parents=True, exist_ok=True)
     names = sorted((p.name for p in TEXTS.iterdir()
@@ -87,7 +112,9 @@ def main():
     # 离线快照：base64(JSON)，base64 里不会出现 </script>，塞进页面绝对安全
     snap = base64.b64encode(json.dumps(files, ensure_ascii=False).encode("utf-8")).decode("ascii")
 
-    cover = "data:image/jpeg;base64," + base64.b64encode(COVER.read_bytes()).decode("ascii")
+    # 封面内嵌成 data URI；顺带压缩一下（它是 index.html 体积的大头，直接影响首屏时间）
+    cover_bytes, cover_note = inline_cover(COVER)
+    cover = "data:image/jpeg;base64," + base64.b64encode(cover_bytes).decode("ascii")
 
     # 标签页图标：内嵌 data URI，双击打开也能显示（缺失则跳过，不报错）
     def data_uri(path, mime):
@@ -112,6 +139,7 @@ def main():
         print("  (空) —— 丢几个 .txt 进 texts/ 再跑一次")
 
     print(f"\nindex.html        {OUT.stat().st_size:>9,} bytes   （含离线快照，双击即可看）")
+    print(f"  封面内嵌        {cover_note}")
     print(f"texts/index.json  {mani_path.stat().st_size:>9,} bytes   （{'已更新' if mani_changed else '无变化'}）")
     bgm = BASE / "bgm.mp3"
     print(f"bgm.mp3           " + (f"{bgm.stat().st_size:>9,} bytes   （背景音乐，不点播放就不下载）"
