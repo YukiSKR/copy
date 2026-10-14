@@ -63,7 +63,17 @@ def main():
 
     cover = "data:image/jpeg;base64," + base64.b64encode(COVER.read_bytes()).decode("ascii")
 
+    # 标签页图标：内嵌 data URI，双击打开也能显示（缺失则跳过，不报错）
+    def data_uri(path, mime):
+        p = BASE / path
+        if not p.is_file():
+            print(f"  [提示] 没有 {path}，图标位置留空（可用 tools/make_favicon.py 生成）")
+            return ""
+        return f"data:{mime};base64," + base64.b64encode(p.read_bytes()).decode("ascii")
+
     page = (TPL.read_text(encoding="utf-8")
+            .replace("FAVICON_32_URI", data_uri("favicon-32.png", "image/png"))
+            .replace("FAVICON_180_URI", data_uri("apple-touch-icon.png", "image/png"))
             .replace("SNAPSHOT_B64", snap)
             .replace("COVER_DATA_URI", cover))
     OUT.write_text(page, encoding="utf-8", newline="\n")
