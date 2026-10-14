@@ -92,6 +92,9 @@ def main():
 
     print(f"\nindex.html        {OUT.stat().st_size:>9,} bytes   （含离线快照，双击即可看）")
     print(f"texts/index.json  {mani_path.stat().st_size:>9,} bytes   （{'已更新' if mani_changed else '无变化'}）")
+    bgm = BASE / "bgm.mp3"
+    print(f"bgm.mp3           " + (f"{bgm.stat().st_size:>9,} bytes   （背景音乐，不点播放就不下载）"
+                                   if bgm.is_file() else "   缺失 —— 播放按钮会提示加载失败"))
     print("\n部署后页面会自动改用实时的 texts/ 文件夹；本地双击则用内嵌快照。")
 
 
