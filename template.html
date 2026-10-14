@@ -607,8 +607,9 @@
   const MANIFEST    = TEXTS_DIR + 'index.json';
   const REPO        = 'GITHUB_REPO';          // "owner/repo"，用于清单落后时自动发现新文件
   const TEXT_EXTS   = ['.txt', '.md', '.json', '.js', '.css', '.html', '.log', '.csv'];
-  const FALLBACK    = ['copy.txt', 'text.txt', 'text1.txt', 'text2.txt',
-                       'readme.md', 'notes.txt', 'content.txt', 'snippet.txt'];
+  const FALLBACK    = ['copy.txt', 'text.txt', '1.txt', '2.txt', '3.txt',
+                       'info.txt', '使用说明.txt', 'readme.md', 'notes.txt',
+                       'text1.txt', 'text2.txt', 'content.txt', 'snippet.txt'];
   const NO_CACHE    = { cache: 'no-store' };
   const DISCOVER_KEY = 'txt-copy-card.discover.v1';
 
@@ -632,16 +633,23 @@
     return pa.length - pb.length;
   }
 
+  let manifestBroken = false;      // 清单坏了（空文件/格式错）时给个明确提示
+
   async function fetchManifest() {
     try {
       const res = await fetch(MANIFEST, NO_CACHE);
       if (!res.ok) return null;
-      const data = await res.json();
+      const text = (await res.text()).trim();
+      if (!text) { manifestBroken = true; return null; }   // 空清单 = 坏了
+      const data = JSON.parse(text);
       const names = (Array.isArray(data) ? data : data.files || [])
         .map(f => (typeof f === 'string' ? f : f && f.name))
         .filter(n => n && isTexty(n));
       return names.length ? names : null;
-    } catch (e) { return null; }
+    } catch (e) {
+      manifestBroken = true;                                // 解析失败 = 坏了
+      return null;
+    }
   }
 
   async function probe(names) {
@@ -676,11 +684,12 @@
     } catch (e) { return []; }
   }
 
-  /* 清单落后时的「自动发现」：问 GitHub 要一份目录列表。
-     GitHub Pages 不能列目录，但 GitHub 的公开接口可以 —— 这就是「往版本库
-     里丢 txt，网页也能发现」的关键。两个数据源互为备份：
-       ① api.github.com/repos/{repo}/contents/texts  （匿名每小时 60 次）
-       ② data.jsdelivr.com 的包文件列表              （不限次，API 限流时替补）
+  /* 清单落后时的「自动发现」：问 CDN / GitHub 要一份目录列表。
+     GitHub Pages 不能列目录，但这两个接口可以 —— 这就是「往版本库里丢 txt，
+     网页也能发现」的关键。顺序很重要：
+       ① data.jsdelivr.com   —— 不限流，主力（匿名 GitHub API 每小时只有 60 次，
+                                 刷新几次就用光了，会导致新文件迟迟不出现）
+       ② api.github.com      —— 备用
      结果存 sessionStorage 30 秒，免得每次刷新都打接口。 */
   function discoverCache() {
     try {
@@ -701,32 +710,32 @@
     if (!REPO || !REPO.includes('/')) return [];
     let names = [];
 
-    // ① GitHub API
+    // ① jsDelivr 目录列表（不限流，最靠谱）
     try {
-      const res = await fetch('https://api.github.com/repos/' + REPO + '/contents/' +
-                              TEXTS_DIR.replace(/\/$/, ''), NO_CACHE);
+      const res = await fetch('https://data.jsdelivr.com/v1/packages/gh/' + REPO +
+                              '@main?structure=flat', NO_CACHE);
       if (res.ok) {
         const data = await res.json();
-        names = (Array.isArray(data) ? data : [])
-          .filter(f => f && f.type === 'file' && isTexty(f.name) && f.name !== 'index.json')
-          .map(f => f.name);
+        names = (data.files || [])
+          .map(f => String(f.name || ''))
+          .filter(n => n.startsWith('/' + TEXTS_DIR))
+          .map(n => n.slice(TEXTS_DIR.length + 1))
+          .filter(n => n && !n.includes('/') && n !== 'index.json' && isTexty(n));
       }
-    } catch (e) { /* 限流/断网，试 ② */ }
+    } catch (e) { /* 试 ② */ }
 
-    // ② jsDelivr
+    // ② GitHub API（可能被限流）
     if (!names.length) {
       try {
-        const res = await fetch('https://data.jsdelivr.com/v1/packages/gh/' + REPO +
-                                '@main?structure=flat', NO_CACHE);
+        const res = await fetch('https://api.github.com/repos/' + REPO + '/contents/' +
+                                TEXTS_DIR.replace(/\/$/, ''), NO_CACHE);
         if (res.ok) {
           const data = await res.json();
-          names = (data.files || [])
-            .map(f => String(f.name || ''))
-            .filter(n => n.startsWith('/' + TEXTS_DIR))
-            .map(n => n.slice(TEXTS_DIR.length + 1))
-            .filter(n => n && !n.includes('/') && n !== 'index.json' && isTexty(n));
+          names = (Array.isArray(data) ? data : [])
+            .filter(f => f && f.type === 'file' && isTexty(f.name) && f.name !== 'index.json')
+            .map(f => f.name);
         }
-      } catch (e) { /* 忽略 */ }
+      } catch (e) { /* 两个源都不行就只能靠清单 */ }
     }
 
     names = [...new Set(names)].sort(naturalCompare);
@@ -761,7 +770,11 @@
     const kind   = listed ? '清单 index.json' : '文件名探测';
 
     const cached = new Map();
-    const probeList = listed ? [] : FALLBACK;
+    // 清单坏了（空文件/格式错）时多探一些常见文件名，尽量不让页面空着
+    let probeList = listed ? [] : FALLBACK;
+    if (!listed && manifestBroken) {
+      probeList = probeList.concat(Array.from({ length: 30 }, (_, i) => (i + 1) + '.txt'));
+    }
     (await probe(probeList)).forEach(f => cached.set(f.name, f.body));
 
     // 清单里的 + 探测到的 + 远端目录新发现的，合并去重
@@ -1184,7 +1197,12 @@
 
       // 清单里没有、从仓库新发现的文件：给个提示，让人知道是怎么冒出来的
       const fresh = res.fresh || [];
-      if (fresh.length) {
+      if (manifestBroken) {
+        el.footSrc.textContent = '⚠ 清单 index.json 坏了，靠自动发现兜着';
+        el.footSrc.className = 'mode-pill snap';
+        el.footSrc.style.display = 'inline-block';
+        el.footSrc.title = 'texts/index.json 是空文件或格式错误，请跑一次 python build.py 重新生成';
+      } else if (fresh.length) {
         el.footSrc.textContent = '新发现 ' + fresh.length + ' 个未入清单的文件';
         el.footSrc.className = 'mode-pill snap';
         el.footSrc.style.display = 'inline-block';

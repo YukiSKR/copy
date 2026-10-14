@@ -43,6 +43,24 @@ def read_text(p: pathlib.Path) -> str:
     return p.read_text(encoding="utf-8", errors="replace").replace("\r\n", "\n").rstrip("\n")
 
 
+def check_manifest(path: pathlib.Path):
+    """清单是页面的“花名册”，坏了页面就一片空白。
+    这里主动校验（而不是等页面出问题），坏了直接报错 —— Action 会显示红色，一眼能看到。"""
+    if not path.is_file():
+        return
+    raw = path.read_bytes()
+    if not raw.strip():
+        raise SystemExit(f"[!] {path.name} 是空文件（{len(raw)} 字节）—— 请删掉它再跑一次，"
+                         f"或从 git 历史里恢复一个正常版本")
+    try:
+        data = json.loads(raw.decode("utf-8"))
+    except Exception as e:
+        raise SystemExit(f"[!] {path.name} 不是合法 JSON（{len(raw)} 字节）：{e}")
+    if not isinstance(data, dict) or not isinstance(data.get("files"), list):
+        raise SystemExit(f"[!] {path.name} 结构不对：缺少 files 数组")
+    print(f"  清单自检通过：{len(data['files'])} 个条目")
+
+
 def collect():
     TEXTS.mkdir(parents=True, exist_ok=True)
     names = sorted((p.name for p in TEXTS.iterdir()
@@ -52,16 +70,19 @@ def collect():
 
 
 def main():
+    check_manifest(TEXTS / "index.json")        # 先体检
     files = collect()
 
-    # 清单：给 GitHub Pages 上的实时读取用
+    # 清单：给 GitHub Pages 上的实时读取用（先写临时文件再替换，避免中途失败留下半截文件）
     manifest = {"files": [{"name": f["name"], "size": (TEXTS / f["name"]).stat().st_size}
                           for f in files]}
     mani_path = TEXTS / "index.json"
     mani_text = json.dumps(manifest, ensure_ascii=False, indent=2) + "\n"
     mani_changed = (not mani_path.is_file()) or mani_path.read_text(encoding="utf-8") != mani_text
     if mani_changed:
-        mani_path.write_text(mani_text, encoding="utf-8", newline="\n")
+        tmp = mani_path.with_suffix(".json.tmp")
+        tmp.write_text(mani_text, encoding="utf-8", newline="\n")
+        tmp.replace(mani_path)
 
     # 离线快照：base64(JSON)，base64 里不会出现 </script>，塞进页面绝对安全
     snap = base64.b64encode(json.dumps(files, ensure_ascii=False).encode("utf-8")).decode("ascii")

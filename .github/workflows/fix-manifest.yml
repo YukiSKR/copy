@@ -1,0 +1,81 @@
+name: 修复并更新 texts 清单
+
+# 用途：把「新增/改名 txt 后网页看不到」这件事彻底修好。
+#
+# 背景：仓库里另一个工作流 update-manifest.yml 用了 `git mktree` 手工拼树，
+# 而 git mktree 不接受带 "/" 的路径（例如 .github/workflows/xxx），
+# 所以它每次都在推送前失败，清单 texts/index.json 因此长期没被更新（甚至被留成空文件）。
+#
+# 这个工作流不做任何手工拼树，改用最可靠的 git index 流程：
+#     ① 对齐远端最新提交（仓库里其他文件天然保留，不会被整树替换删掉）
+#     ② 只覆盖本次真正改动的 index.html 与 texts/index.json
+#     ③ git write-tree -> commit-tree -> push
+#
+# 想加文本就照旧：把 .txt 丢进 texts/ 提交即可；也可以点 Actions → 本工作流 → Run workflow 手动触发。
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'texts/**'
+      - 'build.py'
+      - 'template.html'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fix-manifest-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  manifest:
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: 重新生成 texts/index.json 与 index.html
+        run: python build.py
+
+      - name: 提交（保留其他文件；不用 mktree，改走 git index）
+        run: |
+          set -e
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add texts/index.json index.html
+          if git diff --cached --quiet; then
+            echo "没有变化，跳过提交"
+            exit 0
+          fi
+          git commit -m "chore: 更新 texts 清单 [skip ci]"
+
+          for i in 1 2 3; do
+            echo "--- 第 $i 次尝试推送 ---"
+            git fetch origin "${GITHUB_REF_NAME}" --force
+            REMOTE_SHA=$(git rev-parse FETCH_HEAD)
+
+            # 索引对齐远端最新：其他文件（含你在网页上加的 txt）原样保留
+            git reset --mixed "$REMOTE_SHA" >/dev/null
+            git add texts/index.json index.html        # 只覆盖本次改动的两个文件
+            NEWTREE=$(git write-tree)
+            echo "本次覆盖："
+            git diff --cached --name-only | sed 's/^/    /'
+
+            COMMIT=$(git commit-tree "$NEWTREE" -p "$REMOTE_SHA" \
+                     -m "chore: 更新 texts 清单 [skip ci]")
+            if git push origin "${COMMIT}:${GITHUB_REF_NAME}"; then
+              echo "推送成功：${COMMIT}"
+              exit 0
+            fi
+            sleep 5
+          done
+
+          echo "三次都被抢先，未推送成功"
+          exit 1
