@@ -523,10 +523,12 @@
      本地想预览请跑  python build.py  再用本地服务打开（file:// 会被浏览器拦截）。 */
   const TEXTS_DIR   = 'texts/';
   const MANIFEST    = TEXTS_DIR + 'index.json';
+  const REPO        = 'yukiskr/copy';          // "owner/repo"，用于清单落后时自动发现新文件
   const TEXT_EXTS   = ['.txt', '.md', '.json', '.js', '.css', '.html', '.log', '.csv'];
   const FALLBACK    = ['copy.txt', 'text.txt', 'text1.txt', 'text2.txt',
                        'readme.md', 'notes.txt', 'content.txt', 'snippet.txt'];
   const NO_CACHE    = { cache: 'no-store' };
+  const DISCOVER_KEY = 'txt-copy-card.discover.v1';
 
   const isTexty = name => TEXT_EXTS.some(x => name.toLowerCase().endsWith(x));
 
@@ -592,6 +594,86 @@
     } catch (e) { return []; }
   }
 
+  /* 清单落后时的「自动发现」：问 GitHub 要一份目录列表。
+     GitHub Pages 不能列目录，但 GitHub 的公开接口可以 —— 这就是「往版本库
+     里丢 txt，网页也能发现」的关键。两个数据源互为备份：
+       ① api.github.com/repos/{repo}/contents/texts  （匿名每小时 60 次）
+       ② data.jsdelivr.com 的包文件列表              （不限次，API 限流时替补）
+     结果存 sessionStorage 30 秒，免得每次刷新都打接口。 */
+  function discoverCache() {
+    try {
+      const raw = sessionStorage.getItem(DISCOVER_KEY);
+      if (!raw) return null;
+      const c = JSON.parse(raw);
+      return (Date.now() - c.t < 30000) ? c.v : null;
+    } catch (e) { return null; }
+  }
+  function setDiscoverCache(v) {
+    try { sessionStorage.setItem(DISCOVER_KEY, JSON.stringify({ t: Date.now(), v })); }
+    catch (e) { /* 无痕模式之类，忽略 */ }
+  }
+
+  async function discoverRemote() {
+    const cached = discoverCache();
+    if (cached) return cached;
+    if (!REPO || !REPO.includes('/')) return [];
+    let names = [];
+
+    // ① GitHub API
+    try {
+      const res = await fetch('https://api.github.com/repos/' + REPO + '/contents/' +
+                              TEXTS_DIR.replace(/\/$/, ''), NO_CACHE);
+      if (res.ok) {
+        const data = await res.json();
+        names = (Array.isArray(data) ? data : [])
+          .filter(f => f && f.type === 'file' && isTexty(f.name))
+          .map(f => f.name);
+      }
+    } catch (e) { /* 限流/断网，试 ② */ }
+
+    // ② jsDelivr
+    if (!names.length) {
+      try {
+        const res = await fetch('https://data.jsdelivr.com/v1/packages/gh/' + REPO +
+                                '@main?structure=flat', NO_CACHE);
+        if (res.ok) {
+          const data = await res.json();
+          names = (data.files || [])
+            .map(f => String(f.name || ''))
+            .filter(n => n.startsWith('/' + TEXTS_DIR))
+            .map(n => n.slice(TEXTS_DIR.length + 1))
+            .filter(n => n && !n.includes('/') && n !== 'index.json' && isTexty(n));
+        }
+      } catch (e) { /* 忽略 */ }
+    }
+
+    names = [...new Set(names)].sort(naturalCompare);
+    if (names.length) setDiscoverCache(names);
+    return names;
+  }
+
+  /* 按文件名，从「仓库原始地址」取内容（GitHub Pages 上新增的文件也能拿到） */
+  async function fetchRaw(name) {
+    const urls = [];
+    if (REPO && REPO.includes('/')) {
+      urls.push('https://raw.githubusercontent.com/' + REPO + '/main/' + TEXTS_DIR +
+                encodeURIComponent(name));
+      urls.push('https://cdn.jsdelivr.net/gh/' + REPO + '@main/' + TEXTS_DIR +
+                encodeURIComponent(name));
+    }
+    urls.push(TEXTS_DIR + encodeURIComponent(name));
+    for (const u of urls) {
+      try {
+        const res = await fetch(u, NO_CACHE);
+        if (!res.ok) continue;
+        const body = await res.text();
+        if (/^\s*<(!doctype|html)/i.test(body)) continue;
+        return body;
+      } catch (e) { /* 换下一个源 */ }
+    }
+    return null;
+  }
+
   async function loadFolder() {
     const listed = await fetchManifest();
     const kind   = listed ? '清单 index.json' : '文件名探测';
@@ -600,8 +682,11 @@
     const probeList = listed ? [] : FALLBACK;
     (await probe(probeList)).forEach(f => cached.set(f.name, f.body));
 
-    // 清单里的文件 + 探测到的文件，合并去重（清单优先）
+    // 清单里的 + 探测到的 + 远端目录新发现的，合并去重
     const names = [...new Set([...(listed || []), ...cached.keys()])].sort(naturalCompare);
+
+    const discovered = await discoverRemote();
+    const extra = discovered.filter(n => !names.includes(n));
 
     const missing = [];
     const files = (await Promise.all(names.map(async name => {
@@ -616,7 +701,16 @@
       return { id: name, name, content: body.replace(/\r\n/g, '\n').replace(/\s+$/, '') };
     }))).filter(Boolean);
 
-    return { files, kind, missing };
+    // 清单里没有、但仓库里确实存在的：直接去原始地址取
+    const fresh = (await Promise.all(extra.map(async name => {
+      const body = await fetchRaw(name);
+      if (body === null) return null;
+      return { id: name, name, content: body.replace(/\r\n/g, '\n').replace(/\s+$/, ''),
+               fresh: true };
+    }))).filter(Boolean);
+
+    const all = files.concat(fresh).sort((a, b) => naturalCompare(a.name, b.name));
+    return { files: all, kind, missing, fresh: fresh.map(f => f.name), listed: listed || [] };
   }
 
 
@@ -659,9 +753,11 @@
       b.type = 'button';
       b.className = 'tab' + (f.id === activeId ? ' active' : '') + (f.dropped ? ' dropped' : '');
       b.setAttribute('role', 'tab');
-      b.innerHTML = '<span class="ico">' + (f.dropped ? '📎' : f.embedded ? '📦' : '📄') + '</span>' +
+      b.innerHTML = '<span class="ico">' +
+                      (f.dropped ? '📎' : f.embedded ? '📦' : f.fresh ? '🆕' : '📄') + '</span>' +
                     '<span class="fname"></span>' +
                     (f.embedded ? '<span class="snap-dot" title="来自 index.html 的离线快照">·快照</span>' : '') +
+                    (f.fresh ? '<span class="snap-dot" title="仓库里有、但清单没来得及收录">·新</span>' : '') +
                     '<span class="cnt">' + (f.content ? f.content.replace(/\r\n/g, '\n').split('\n').length : 0) + '</span>' +
                     (f.dropped ? '<button class="x" title="移除这个标签">×</button>' : '');
       b.querySelector('.fname').textContent = f.name;
@@ -695,7 +791,7 @@
     el.chipName.textContent = f.name;
     el.fileName.textContent = f.name;
     el.lineHint.textContent = '共 ' + lines + ' 行 · 单击正文可全选' +
-      (f.embedded ? ' · 离线快照' : '');
+      (f.embedded ? ' · 离线快照' : f.fresh ? ' · 仓库新文件' : '');
     el.copyBtn.classList.remove('done');
     el.btnText.textContent = '一键复制当前内容';
     el.miniCopy.textContent = '复制';
@@ -923,6 +1019,15 @@
       FILES = res.files.concat(droppedFiles());
       el.footMode.textContent = '数据来源：' + TEXTS_DIR + res.kind;
       el.footSrc.style.display = 'none';
+
+      // 清单里没有、从仓库新发现的文件：给个提示，让人知道是怎么冒出来的
+      const fresh = res.fresh || [];
+      if (fresh.length) {
+        el.footSrc.textContent = '新发现 ' + fresh.length + ' 个未入清单的文件';
+        el.footSrc.className = 'mode-pill snap';
+        el.footSrc.style.display = 'inline-block';
+        el.footSrc.title = fresh.join('、');
+      }
     } else {
       const snap = snapshotFiles();
       FILES = snap.concat(droppedFiles());
@@ -947,6 +1052,7 @@
 
   el.refresh.addEventListener('click', async () => {
     const before = FILES.filter(f => !f.dropped).map(f => f.id).join('|');
+    try { sessionStorage.removeItem(DISCOVER_KEY); } catch (e) { /* 忽略 */ }
     await reloadFromFolder();
     const after = FILES.filter(f => !f.dropped).map(f => f.id).join('|');
     showToast(before === after ? 'same' : 'reloaded', TEXTS_DIR + ' 文件夹');
