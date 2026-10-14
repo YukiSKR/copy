@@ -381,6 +381,78 @@
   .empty .big { display: block; font-size: 38px; margin-bottom: 8px; }
 
   .foot { margin-top: 18px; text-align: center; font-size: 11.8px; color: #a294bd; font-weight: 600; letter-spacing: .03em; }
+
+  /* ===== 背景音乐开关（右下角悬浮） ===== */
+  .bgm-btn {
+    position: fixed;
+    right: 22px;
+    bottom: 22px;
+    z-index: 40;
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    padding: 12px 18px 12px 14px;
+    border: 1.5px solid rgba(255, 255, 255, .95);
+    border-radius: 999px;
+    cursor: pointer;
+    font-family: var(--font);
+    font-size: 13.5px;
+    font-weight: 800;
+    letter-spacing: .02em;
+    color: #6c3f78;
+    background: rgba(255, 253, 254, .92);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 14px 30px -14px rgba(120, 60, 150, .75);
+    transition: transform .18s cubic-bezier(.34, 1.56, .64, 1), box-shadow .18s, color .18s, background .2s;
+  }
+  .bgm-btn:hover { transform: translateY(-3px) scale(1.03); box-shadow: 0 18px 34px -14px rgba(120, 60, 150, .85); }
+  .bgm-btn:active { transform: translateY(0) scale(.96); }
+  .bgm-btn .note {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 24px; height: 24px; border-radius: 50%;
+    font-size: 15px; line-height: 1;
+    background: linear-gradient(135deg, var(--pink), var(--blue));
+    color: #fff;
+    box-shadow: 0 4px 10px -4px rgba(190, 80, 170, .9);
+  }
+  .bgm-btn.playing {
+    color: #fff;
+    border-color: transparent;
+    background: linear-gradient(135deg, #ff95cd, #8f9dff);
+    box-shadow: 0 16px 32px -12px rgba(190, 80, 170, .95);
+  }
+  .bgm-btn.playing .note { background: rgba(255, 255, 255, .28); animation: spin 3.4s linear infinite; }
+  .bgm-btn.playing .bars { display: inline-flex; }
+  .bgm-btn.error { color: #a06070; background: #fff5f7; border-color: #ffd9e2; }
+
+  /* 播放中的跳动小竖条 */
+  .bgm-btn .bars { display: none; align-items: flex-end; gap: 2px; height: 13px; }
+  .bgm-btn .bars i {
+    width: 3px; border-radius: 2px; background: currentColor; opacity: .9;
+    animation: bars .9s ease-in-out infinite;
+  }
+  .bgm-btn .bars i:nth-child(1) { height: 6px;  animation-delay: 0s; }
+  .bgm-btn .bars i:nth-child(2) { height: 12px; animation-delay: .18s; }
+  .bgm-btn .bars i:nth-child(3) { height: 8px;  animation-delay: .36s; }
+  @keyframes bars { 0%, 100% { transform: scaleY(.45); } 50% { transform: scaleY(1); } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* 播放后给一点浮动的音符特效 */
+  .bgm-note {
+    position: fixed; z-index: 41; font-size: 16px; pointer-events: none;
+    color: #ff7cc0; text-shadow: 0 2px 8px rgba(255, 255, 255, .9);
+    animation: noteUp 1.5s ease-out forwards;
+  }
+  @keyframes noteUp {
+    0%   { opacity: 0; transform: translate(0, 0) scale(.6) rotate(-10deg); }
+    18%  { opacity: 1; }
+    100% { opacity: 0; transform: translate(var(--dx, 20px), -70px) scale(1.25) rotate(18deg); }
+  }
+
+  @media (max-width: 520px) {
+    .bgm-btn { right: 12px; bottom: 12px; padding: 10px 14px; font-size: 12.5px; }
+    .bgm-btn .txt { display: none; }
+  }
   .mode-pill {
     display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px;
     font-size: 10.5px; font-weight: 800; letter-spacing: .04em;
@@ -460,7 +532,7 @@
 
 <!-- 离线快照：build.py 把 texts/ 的内容打进这里。
      双击（file://）打开时用它，部署后优先用实时的 texts/ 文件夹。 -->
-<script type="application/json" id="snapshot">W3sibmFtZSI6ICIt5L2/55So6K+05piOLS50eHQiLCAiY29udGVudCI6ICLkvb/nlKjor7TmmI7vvIjnpLrkvovmlofmnKzvvIlcbj09PT09PT09PT09PT09PT09PT09PT09PVxuXG7ov5nkuKrmlofku7bmmK/nlKjmnaXmvJTnpLrlpJrmoIfnrb7liIfmjaLnmoTvvIzlj6/ku6Xnm7TmjqXliKDmjonjgIJcblxuMS4g5oqK5Lu75oSPIC50eHQg5Lii6L+bIHRleHRzLyDmlofku7blpLlcbjIuIOacrOWcsO+8mui3keS4gOasoSAgcHl0aG9uIGJ1aWxkLnB5ICDmm7TmlrDmuIXljZXvvIznhLblkI7ngrnpobXpnaLkuIrnmoTjgIzwn5SEIOmHjeaWsOivu+WPluOAjVxuMy4gR2l0SHVi77yaZ2l0IHB1c2gg5LmL5ZCOIEFjdGlvbiDkvJroh6rliqjmm7TmlrDmuIXljZXvvIzliLfmlrDpobXpnaLlsLHog73nnIvliLDmlrDmoIfnrb5cblxu6aG16Z2i5LiK6IO95YGa55qE5LqL77yaXG4gIMK3IOeCueagh+etvuWIh+aNouaWh+acrFxuICDCtyDjgIzkuIDplK7lpI3liLblvZPliY3lhoXlrrnjgI0vIOWPs+S4i+inkui/t+S9oOOAjOWkjeWItuOAjeKGkiDlvLnlh7rjgIzlpI3liLbmiJDlip/jgI3lr7nor53moYZcbiAgwrcg5Y2V5Ye75q2j5paH5Y+v5YWo6YCJXG4gIMK3IOebtOaOpeaKiiB0eHQg5ouW6L+b572R6aG177yM5oiW54K544CM77yLIOa3u+WKoCB0eHTjgI3kuLTml7bnnIvkuIDnnLxcblxu56Wd5L2g5pG46bG85oSJ5b+rIH5cblxu77yI6L+Z5Lu95riF5Y2V55SxIEdpdEh1YiBBY3Rpb24g6Ieq5Yqo57u05oqk77ya5b6AIHRleHRzLyDkuKLmlrDmlofku7blkI7kvJroh6rliqjmlLblvZXvvIkifSwgeyJuYW1lIjogImNvcHkudHh0IiwgImNvbnRlbnQiOiAiKCgpID0+IHtcbiAgY29uc3QgYWxsb3cgPSBlID0+IGUuc3RvcEltbWVkaWF0ZVByb3BhZ2F0aW9uKCk7IC8vIOS4jSBwcmV2ZW50RGVmYXVsdO+8jOS/neeVmem7mOiupOeymOi0tFxuICBjb25zdCB0eXBlcyA9IFsncGFzdGUnLCAnY29weScsICdjdXQnLCAnY29udGV4dG1lbnUnXTtcblxuICAvLyDmjZXojrfpmLbmrrXmiqLlhYjmiafooYzvvIzpmLvmraLnvZHnq5noh6rlt7HnmoTnm5HlkKzlmahcbiAgdHlwZXMuZm9yRWFjaCh0eXBlID0+IHtcbiAgICB3aW5kb3cuYWRkRXZlbnRMaXN0ZW5lcih0eXBlLCBhbGxvdywgdHJ1ZSk7XG4gICAgZG9jdW1lbnQuYWRkRXZlbnRMaXN0ZW5lcih0eXBlLCBhbGxvdywgdHJ1ZSk7XG4gIH0pO1xuXG4gIC8vIOa4hemZpOWGheiBlOaLpuaIquWxnuaAp1xuICB3aW5kb3cub25wYXN0ZSA9IHdpbmRvdy5vbmNvcHkgPSB3aW5kb3cub25jdXQgPSB3aW5kb3cub25jb250ZXh0bWVudSA9IG51bGw7XG4gIGRvY3VtZW50Lm9ucGFzdGUgPSBkb2N1bWVudC5vbmNvcHkgPSBkb2N1bWVudC5vbmN1dCA9IGRvY3VtZW50Lm9uY29udGV4dG1lbnUgPSBudWxsO1xuXG4gIGRvY3VtZW50LnF1ZXJ5U2VsZWN0b3JBbGwoJ1tvbnBhc3RlXSxbb25jb3B5XSxbb25jdXRdLFtvbmNvbnRleHRtZW51XScpLmZvckVhY2goZWwgPT4ge1xuICAgIFsnb25wYXN0ZScsICdvbmNvcHknLCAnb25jdXQnLCAnb25jb250ZXh0bWVudSddLmZvckVhY2goYXR0ciA9PiB7XG4gICAgICBlbC5yZW1vdmVBdHRyaWJ1dGUoYXR0cik7XG4gICAgfSk7XG4gIH0pO1xuXG4gIGNvbnNvbGUubG9nKCflt7LlsJ3or5Xop6PpmaTnspjotLQv5aSN5Yi2L+WJquWIhy/lj7PplK7mi6bmiKrvvIzliLfmlrDpobXpnaLlj6/mgaLlpI0nKTtcbn0pKCk7In1d</script>
+<script type="application/json" id="snapshot">W3sibmFtZSI6ICIxLnR4dCIsICJjb250ZW50IjogIlRFU1QifSwgeyJuYW1lIjogImNvcHkudHh0IiwgImNvbnRlbnQiOiAiKCgpID0+IHtcbiAgY29uc3QgYWxsb3cgPSBlID0+IGUuc3RvcEltbWVkaWF0ZVByb3BhZ2F0aW9uKCk7IC8vIOS4jSBwcmV2ZW50RGVmYXVsdO+8jOS/neeVmem7mOiupOeymOi0tFxuICBjb25zdCB0eXBlcyA9IFsncGFzdGUnLCAnY29weScsICdjdXQnLCAnY29udGV4dG1lbnUnXTtcblxuICAvLyDmjZXojrfpmLbmrrXmiqLlhYjmiafooYzvvIzpmLvmraLnvZHnq5noh6rlt7HnmoTnm5HlkKzlmahcbiAgdHlwZXMuZm9yRWFjaCh0eXBlID0+IHtcbiAgICB3aW5kb3cuYWRkRXZlbnRMaXN0ZW5lcih0eXBlLCBhbGxvdywgdHJ1ZSk7XG4gICAgZG9jdW1lbnQuYWRkRXZlbnRMaXN0ZW5lcih0eXBlLCBhbGxvdywgdHJ1ZSk7XG4gIH0pO1xuXG4gIC8vIOa4hemZpOWGheiBlOaLpuaIquWxnuaAp1xuICB3aW5kb3cub25wYXN0ZSA9IHdpbmRvdy5vbmNvcHkgPSB3aW5kb3cub25jdXQgPSB3aW5kb3cub25jb250ZXh0bWVudSA9IG51bGw7XG4gIGRvY3VtZW50Lm9ucGFzdGUgPSBkb2N1bWVudC5vbmNvcHkgPSBkb2N1bWVudC5vbmN1dCA9IGRvY3VtZW50Lm9uY29udGV4dG1lbnUgPSBudWxsO1xuXG4gIGRvY3VtZW50LnF1ZXJ5U2VsZWN0b3JBbGwoJ1tvbnBhc3RlXSxbb25jb3B5XSxbb25jdXRdLFtvbmNvbnRleHRtZW51XScpLmZvckVhY2goZWwgPT4ge1xuICAgIFsnb25wYXN0ZScsICdvbmNvcHknLCAnb25jdXQnLCAnb25jb250ZXh0bWVudSddLmZvckVhY2goYXR0ciA9PiB7XG4gICAgICBlbC5yZW1vdmVBdHRyaWJ1dGUoYXR0cik7XG4gICAgfSk7XG4gIH0pO1xuXG4gIGNvbnNvbGUubG9nKCflt7LlsJ3or5Xop6PpmaTnspjotLQv5aSN5Yi2L+WJquWIhy/lj7PplK7mi6bmiKrvvIzliLfmlrDpobXpnaLlj6/mgaLlpI0nKTtcbn0pKCk7In0sIHsibmFtZSI6ICLkvb/nlKjor7TmmI4udHh0IiwgImNvbnRlbnQiOiAi5L2/55So6K+05piO77yI56S65L6L5paH5pys77yJXG49PT09PT09PT09PT09PT09PT09PT09PT1cblxu6L+Z5Liq5paH5Lu25piv55So5p2l5ryU56S65aSa5qCH562+5YiH5o2i55qE77yM5Y+v5Lul55u05o6l5Yig5o6J44CCXG5cbjEuIOaKiuS7u+aEjyAudHh0IOS4oui/myB0ZXh0cy8g5paH5Lu25aS5XG4yLiDmnKzlnLDvvJrot5HkuIDmrKEgIHB5dGhvbiBidWlsZC5weSAg5pu05paw5riF5Y2V77yM54S25ZCO54K56aG16Z2i5LiK55qE44CM8J+UhCDph43mlrDor7vlj5bjgI1cbjMuIEdpdEh1Yu+8mmdpdCBwdXNoIOS5i+WQjiBBY3Rpb24g5Lya6Ieq5Yqo5pu05paw5riF5Y2V77yM5Yi35paw6aG16Z2i5bCx6IO955yL5Yiw5paw5qCH562+XG5cbumhtemdouS4iuiDveWBmueahOS6i++8mlxuICDCtyDngrnmoIfnrb7liIfmjaLmlofmnKxcbiAgwrcg44CM5LiA6ZSu5aSN5Yi25b2T5YmN5YaF5a6544CNLyDlj7PkuIvop5Lov7fkvaDjgIzlpI3liLbjgI3ihpIg5by55Ye644CM5aSN5Yi25oiQ5Yqf44CN5a+56K+d5qGGXG4gIMK3IOWNleWHu+ato+aWh+WPr+WFqOmAiVxuICDCtyDnm7TmjqXmioogdHh0IOaLlui/m+e9kemhte+8jOaIlueCueOAjO+8iyDmt7vliqAgdHh044CN5Li05pe255yL5LiA55y8XG5cbuelneS9oOaRuOmxvOaEieW/qyB+XG5cbu+8iOi/meS7vea4heWNleeUsSBHaXRIdWIgQWN0aW9uIOiHquWKqOe7tOaKpO+8muW+gCB0ZXh0cy8g5Lii5paw5paH5Lu25ZCO5Lya6Ieq5Yqo5pS25b2V77yJIn0sIHsibmFtZSI6ICLmlrDlu7og5paH5pys5paH5qGjLnR4dCIsICJjb250ZW50IjogIi1wZXJmZWN0d29ybGQg5Zu95pyNXG4td29ybGR3aWRlIOWbvemZheacjVxuVktfRjExXG5cbjM3OTI3NjQ3MDdcbjI4OTA1MzI0NzdcblxuRDpcXFhYTUlcXFpaTUlcXHJlc2hhZGVcXGRpbnB1dDguZGxsXG5EOlxcWFhNSVxcWlpNSVxcZDNkMTEuZGxsXG5cbnZiMCBlNGVhNmU3MlxudmIxIDNjOTMyZDRhXG52YjIgMWM1Zjg2MDJcblxudmIwIDE1NWM4YzMzXG52YjEgMzNlOTY3ODggNjk5NjAgaW5kZXhjb3VudCAxOTJcbnZiMiA2MjliZGU3YiJ9XQ==</script>
 
 <!-- 遮罩 + 弹出提示 -->
 <div class="scrim" id="scrim"></div>
@@ -477,9 +549,19 @@
 <!-- 文件输入：点击“+ 添加 txt”时使用 -->
 <input type="file" id="filePicker" accept=".txt,.md,.json,.js,.css,.html,text/*" multiple hidden />
 
+<!-- 背景音乐开关：默认不播放，点了才播（preload=none，不点就不下载） -->
+<button class="bgm-btn" id="bgmBtn" type="button" aria-pressed="false"
+        title="播放背景音乐">
+  <span class="note" id="bgmIcon">♪</span>
+  <span class="txt" id="bgmText">播放音乐</span>
+  <span class="bars" aria-hidden="true"><i></i><i></i><i></i></span>
+</button>
+
 <script>
   const LS_KEY   = 'txt-copy-card.dropped.v1';
   const LS_LIMIT = 900 * 1024;          // 拖入文件的总容量上限（localStorage 常用上限约 5MB）
+  const BGM_SRC  = 'bgm.mp3';           // 背景音乐：默认不播放，点了才加载播放
+  const BGM_KEY  = 'txt-copy-card.bgm.v1';
 
   const KEYWORDS = ['const','let','var','function','return','if','else','for','forEach',
                     'true','false','null','window','document','console','typeof','new','try','catch'];
@@ -851,6 +933,8 @@
       nostore: { face: '🥲', title: '添加成功，但没能记住', msg: '浏览器本地存储已满或被禁用，<br />刷新页面后这个标签会消失' },
       reloaded: { face: '🔄', title: '文件列表已更新', msg: '发现新的文本，标签栏已重新排列。<br />想永久保留就把它提交到仓库里～' },
       same: { face: '🐣', title: '没有发现新文件', msg: '文件夹里的文本和刚才一样。<br />新加的 txt 记得让 index.json 清单一并更新。' },
+      bgmfail: { face: '🎧', title: '音乐没能加载', msg: '找不到 <b>bgm.mp3</b>，或浏览器不允许读取本地音频。<br />部署后的网址一定可以播放～' },
+      bgmblock: { face: '🔇', title: '浏览器拦住了播放', msg: '再点一下按钮就好；<br />有些浏览器要求先和页面交互过才允许放声音。' },
     }[kind];
 
     face.textContent = conf.face;
@@ -933,6 +1017,84 @@
   }
   el.copyBtn.addEventListener('click', () => handleCopy(el.copyBtn));
   el.miniCopy.addEventListener('click', () => handleCopy(el.miniCopy));
+
+  /* ---------- 背景音乐（默认不播放，只有点按钮才播） ---------- */
+  const bgmBtn = $('bgmBtn'), bgmIcon = $('bgmIcon'), bgmText = $('bgmText');
+  let bgm = null, bgmReady = false, bgmFailed = false;
+
+  function bgmPaint(playing) {
+    bgmBtn.classList.toggle('playing', !!playing);
+    bgmBtn.setAttribute('aria-pressed', playing ? 'true' : 'false');
+    bgmIcon.textContent = playing ? '♫' : '♪';
+    bgmText.textContent = playing ? '暂停音乐' : '播放音乐';
+    bgmBtn.title = playing ? '暂停背景音乐' : '播放背景音乐';
+  }
+
+  function bgmNotes() {
+    const r = bgmBtn.getBoundingClientRect();
+    for (let i = 0; i < 5; i++) {
+      const s = document.createElement('span');
+      s.className = 'bgm-note';
+      s.textContent = ['♪', '♫', '♬', '🎵', '🎶'][i % 5];
+      s.style.left = (r.left + 10 + Math.random() * (r.width - 20)) + 'px';
+      s.style.top = (r.top - 4) + 'px';
+      s.style.setProperty('--dx', (Math.random() * 60 - 30) + 'px');
+      document.body.appendChild(s);
+      setTimeout(() => s.remove(), 1600);
+    }
+  }
+
+  /* 懒创建：页面加载时不碰音频文件，点了才加载 */
+  function bgmMake() {
+    if (bgm || bgmFailed) return bgm;
+    try {
+      bgm = new Audio(BGM_SRC);
+      bgm.loop = true;
+      bgm.preload = 'none';
+      bgm.volume = 0.65;
+      bgm.addEventListener('play',  () => bgmPaint(true));
+      bgm.addEventListener('pause', () => bgmPaint(false));
+      bgm.addEventListener('ended', () => bgmPaint(false));
+      bgm.addEventListener('error', () => {
+        bgmFailed = true;
+        bgmPaint(false);
+        bgmBtn.classList.add('error');
+        bgmText.textContent = '音乐加载失败';
+        bgmBtn.title = '没找到 ' + BGM_SRC + '（或浏览器不允许读取本地音频）';
+        showToast('bgmfail', BGM_SRC);
+      });
+    } catch (e) {
+      bgmFailed = true;
+    }
+    return bgm;
+  }
+
+  bgmBtn.addEventListener('click', async () => {
+    if (bgmFailed) { showToast('bgmfail', BGM_SRC); return; }
+    const a = bgmMake();
+    if (!a) return;
+    if (!a.paused) { a.pause(); return; }
+    try {
+      // 接着上次的位置继续（只记进度，不自动播放）
+      if (!bgmReady) {
+        const saved = parseFloat(localStorage.getItem(BGM_KEY) || '0');
+        if (saved > 3 && isFinite(saved)) { try { a.currentTime = saved; } catch (e) {} }
+        bgmReady = true;
+      }
+      await a.play();
+      bgmNotes();
+    } catch (e) {
+      bgmPaint(false);
+      showToast('bgmblock', BGM_SRC);
+    }
+  });
+
+  // 关页面前记住播放进度
+  window.addEventListener('pagehide', () => {
+    if (bgm && !bgm.paused) {
+      try { localStorage.setItem(BGM_KEY, String(bgm.currentTime || 0)); } catch (e) {}
+    }
+  });
 
   /* ---------- 单击正文自动全选 ---------- */
   el.code.addEventListener('click', () => {
