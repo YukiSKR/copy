@@ -1,6 +1,10 @@
 {
   "files": [
     {
+      "name": "1.txt",
+      "size": 5
+    },
+    {
       "name": "copy.txt",
       "size": 856
     },
